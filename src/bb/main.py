@@ -28,7 +28,7 @@ _GROUPS = {
 for _name, _sub in _GROUPS.items():
     app.add_typer(_sub, name=_name)
 
-app.command("browse")(browse.browse_cmd)
+app.command("browse")(browse.browse)
 
 
 def _version_callback(value: bool) -> None:

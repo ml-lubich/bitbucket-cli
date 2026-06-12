@@ -14,7 +14,7 @@ import typer
 from bb.core.context import resolve_repo
 from bb.core.errors import BBError
 
-app = typer.Typer(help="Open Bitbucket in the browser")
+app = typer.Typer(help="Open Bitbucket in the browser", invoke_without_command=True)
 
 _BASE = "https://bitbucket.org"
 
@@ -26,24 +26,29 @@ def _build_url(workspace: str, slug: str, branch: Optional[str]) -> str:
     return base
 
 
+def _resolve_ws_slug(repo: Optional[str]) -> tuple[str, str]:
+    if repo:
+        parts = repo.split("/", 1)
+        if len(parts) != 2:
+            raise BBError(f"invalid repo format {repo!r}; expected workspace/slug")
+        return parts[0], parts[1]
+    ctx = resolve_repo()
+    return ctx.workspace, ctx.slug
+
+
+@app.callback()
 def browse(
     repo: Optional[str] = typer.Option(None, "--repo", "-r", help="workspace/slug override"),
     branch: Optional[str] = typer.Option(None, "--branch", "-b"),
     no_open: bool = typer.Option(False, "--no-open", help="Print URL only, do not open browser"),
 ) -> None:
     """Open the current repository in the browser."""
-    if repo:
-        parts = repo.split("/", 1)
-        if len(parts) != 2:
-            raise BBError(f"invalid repo format {repo!r}; expected workspace/slug")
-        workspace, slug = parts
-    else:
-        ctx = resolve_repo()
-        workspace, slug = ctx.workspace, ctx.repo
+    workspace, slug = _resolve_ws_slug(repo)
     url = _build_url(workspace, slug, branch)
     typer.echo(url)
     if not no_open:
         webbrowser.open(url)
 
-# alias for main.py which calls browse.browse_cmd
+
+# backward-compat alias
 browse_cmd = browse

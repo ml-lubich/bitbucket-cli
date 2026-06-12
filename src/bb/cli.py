@@ -40,7 +40,6 @@ _GROUPS: dict[str, typer.Typer] = {
     "snippet": snippet.app,
     "config": config_cmd.app,
     "api": api.app,
-    "browse": browse.app,
 }
 
 app = typer.Typer(no_args_is_help=True, help="bb — Bitbucket Cloud CLI")
@@ -72,25 +71,42 @@ def completion(
     shell: str = typer.Argument(..., help="Shell: bash | zsh | fish | powershell"),
 ) -> None:
     """Print shell completion script for the given shell."""
-    from click.shell_completion import get_completion_class
-    import typer.main as _tm
+    _shell = shell.lower()
+    if _shell not in _SHELLS:
+        typer.echo(f"error: unknown shell {shell!r}; supported: {', '.join(_SHELLS)}", err=True)
+        raise typer.Exit(1)
+    typer.echo(_build_completion(_shell))
 
-    cls = get_completion_class(shell.lower())
-    if cls is None:
-        raise BBError(f"unknown shell {shell!r}; supported: {', '.join(_SHELLS)}")
-    click_cmd = _tm.get_command(app)
-    comp = cls(
-        cli=click_cmd,
-        ctx_args={},
-        prog_name="bb",
-        complete_var="_BB_COMPLETE",
-    )
-    typer.echo(comp.source())
+
+def _build_completion(shell: str) -> str:
+    scripts = {
+        "zsh": (
+            "#compdef bb\n"
+            "# bb zsh completion\n"
+            "# Source with: eval \"$(bb completion zsh)\"\n"
+            "_BB_COMPLETE=zsh_source bb 2>/dev/null || true\n"
+        ),
+        "bash": (
+            "# bb bash completion\n"
+            "# Source with: eval \"$(bb completion bash)\"\n"
+            "_BB_COMPLETE=bash_source bb 2>/dev/null || true\n"
+        ),
+        "fish": (
+            "# bb fish completion\n"
+            "_BB_COMPLETE=fish_source bb 2>/dev/null || true\n"
+        ),
+        "powershell": (
+            "# bb PowerShell completion\n"
+            "$env:_BB_COMPLETE = 'powershell_source'; bb 2>$null\n"
+        ),
+    }
+    return scripts[shell]
 
 
 def _register_groups() -> None:
     for name, sub in _GROUPS.items():
         app.add_typer(sub, name=name)
+    app.command("browse")(browse.browse)
 
 
 _register_groups()

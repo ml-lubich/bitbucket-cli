@@ -172,5 +172,5 @@ def test_pipeline_logs_all_steps(monkeypatch: pytest.MonkeyPatch) -> None:
 
     _patch(monkeypatch, [httpx.Response(200, json={"values": steps})])
     monkeypatch.setattr("bb.commands.pipeline.raw_request", mock_raw)
-    result = runner.invoke(app, ["pipeline", "logs", "abc-123"])
+    runner.invoke(app, ["pipeline", "logs", "abc-123"])
     assert len(log_calls) == 2

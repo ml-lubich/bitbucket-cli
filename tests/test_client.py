@@ -1,4 +1,4 @@
-"""Tests for BBClient HTTP behaviour using httpx mock transport."""
+"""Tests for ApiClient HTTP behaviour using httpx mock transport."""
 from __future__ import annotations
 
 import json
@@ -7,7 +7,8 @@ import pytest
 import httpx
 
 from bb.core.auth import Credential
-from bb.core.client import APIError, BBClient
+from bb.core.client import ApiClient
+from bb.core.errors import ApiError
 
 
 def _cred(token: str = "test-token") -> Credential:
@@ -25,30 +26,30 @@ def _transport(status: int, body: dict | None = None) -> httpx.MockTransport:
 
 
 def test_200_returns_json() -> None:
-    client = BBClient(_cred(), _transport=_transport(200, {"display_name": "alice"}))
+    client = ApiClient(_cred(), transport=_transport(200, {"display_name": "alice"}))
     data = client.get("/user")
     assert data["display_name"] == "alice"
 
 
 def test_401_raises_api_error() -> None:
-    client = BBClient(_cred(), _transport=_transport(401, {"error": {"message": "Unauthorized"}}))
-    with pytest.raises(APIError) as exc_info:
+    client = ApiClient(_cred(), transport=_transport(401, {"error": {"message": "Unauthorized"}}))
+    with pytest.raises(ApiError) as exc_info:
         client.get("/user")
-    assert exc_info.value.status == 401
+    assert exc_info.value.status_code == 401
 
 
 def test_404_raises_api_error() -> None:
-    client = BBClient(_cred(), _transport=_transport(404, {"error": {"message": "Not Found"}}))
-    with pytest.raises(APIError) as exc_info:
+    client = ApiClient(_cred(), transport=_transport(404, {"error": {"message": "Not Found"}}))
+    with pytest.raises(ApiError) as exc_info:
         client.get("/repos/x/y")
-    assert exc_info.value.status == 404
+    assert exc_info.value.status_code == 404
 
 
 def test_204_returns_empty_dict() -> None:
     def handler(req: httpx.Request) -> httpx.Response:
         return httpx.Response(204)
 
-    client = BBClient(_cred(), _transport=httpx.MockTransport(handler))
+    client = ApiClient(_cred(), transport=httpx.MockTransport(handler))
     assert client.get("/something") == {}
 
 
@@ -69,6 +70,6 @@ def test_paginate_follows_next() -> None:
             headers={"content-type": "application/json"},
         )
 
-    client = BBClient(_cred(), _transport=httpx.MockTransport(handler))
+    client = ApiClient(_cred(), transport=httpx.MockTransport(handler))
     items = list(client.paginate("/repos"))
     assert len(items) == 2

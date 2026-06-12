@@ -98,14 +98,14 @@ def test_repo_create_public_flag(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_repo_delete_without_yes_prompts(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _make_mock_client()
     monkeypatch.setattr("bb.commands.repo.make_client", lambda: client)
-    result = runner.invoke(app, ["repo", "delete", "ws/todelete"], input="n\n")
+    runner.invoke(app, ["repo", "delete", "ws/todelete"], input="n\n")
     assert client.delete.call_count == 0
 
 
 def test_repo_delete_with_yes_calls_delete(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _make_mock_client()
     monkeypatch.setattr("bb.commands.repo.make_client", lambda: client)
-    result = runner.invoke(app, ["repo", "delete", "ws/todelete", "--yes"])
+    runner.invoke(app, ["repo", "delete", "ws/todelete", "--yes"])
     assert client.delete.call_count == 1
 
 
@@ -123,7 +123,7 @@ def test_repo_set_default_writes_bb_toml(
 
     import subprocess
     monkeypatch.setattr(subprocess, "run", fake_toplevel)
-    result = runner.invoke(app, ["repo", "set-default", "myws/myrepo"])
+    runner.invoke(app, ["repo", "set-default", "myws/myrepo"])
     bb_toml = tmp_path / "bb.toml"
     assert bb_toml.exists()
 

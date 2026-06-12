@@ -6,10 +6,8 @@ Failure modes: ApiError, ContextError, BBError.
 """
 from __future__ import annotations
 
-import json
 import subprocess
 import webbrowser
-from typing import Optional
 
 import typer
 

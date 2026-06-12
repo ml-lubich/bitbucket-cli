@@ -11,20 +11,20 @@ import pytest
     ("https://user@bitbucket.org/myws/myrepo.git", "myws"),
     ("https://bitbucket.org/myws/myrepo", "myws"),
 ])
-def test_parse_remote_workspace(url: str, expected_ws: str) -> None:
-    from bb.core.context import _parse_remote
-    ref = _parse_remote(url)
-    assert ref.workspace == expected_ws
+def test_parse_remote_url_workspace(url: str, expected_ws: str) -> None:
+    from bb.core.context import _parse_remote_url
+    ref = _parse_remote_url(url)
+    assert ref is not None and ref.workspace == expected_ws
 
 
 @pytest.mark.parametrize("url,expected_slug", [
     ("git@bitbucket.org:myws/myrepo.git", "myrepo"),
     ("https://bitbucket.org/myws/myrepo.git", "myrepo"),
 ])
-def test_parse_remote_slug(url: str, expected_slug: str) -> None:
-    from bb.core.context import _parse_remote
-    ref = _parse_remote(url)
-    assert ref.slug == expected_slug
+def test_parse_remote_url_slug(url: str, expected_slug: str) -> None:
+    from bb.core.context import _parse_remote_url
+    ref = _parse_remote_url(url)
+    assert ref is not None and ref.slug == expected_slug
 
 
 def test_override_parses_correctly() -> None:

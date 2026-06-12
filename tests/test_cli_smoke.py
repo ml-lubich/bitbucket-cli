@@ -1,7 +1,6 @@
 """Smoke tests: every command group responds to --help with exit 0."""
 from __future__ import annotations
 
-import pytest
 from typer.testing import CliRunner
 
 runner = CliRunner()

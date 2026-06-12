@@ -12,7 +12,7 @@ from typing import Any, Optional
 import typer
 import tomlkit
 
-from bb.core.client import ApiClient, make_client
+from bb.core.client import make_client
 from bb.core.config import load_settings
 from bb.core.context import RepoContext, resolve_repo
 from bb.core.errors import BBError

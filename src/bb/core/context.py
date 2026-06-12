@@ -93,6 +93,10 @@ def _parse_remote_url(url: str) -> RepoContext:
     )
 
 
+# Alias used by test_ctx.py
+_parse_remote = _parse_remote_url
+
+
 def _git_remote_url() -> str:
     try:
         result = subprocess.run(
@@ -104,3 +108,7 @@ def _git_remote_url() -> str:
         return result.stdout.strip()
     except subprocess.CalledProcessError as exc:
         raise ContextError("not inside a git repo with an origin remote") from exc
+
+
+# Compatibility aliases for tests that import from this module
+_parse_remote = _parse_remote_url

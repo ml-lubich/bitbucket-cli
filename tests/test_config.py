@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
 
-import pytest
 
 import bb.core.config as cfg_mod
 from bb.core.config import Settings, load_settings

@@ -7,3 +7,5 @@ __pycache__/
 .coverage
 dist/
 *.egg-info/
+.claude/
+tmp/

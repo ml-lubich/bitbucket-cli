@@ -13,9 +13,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from bb.core.client import ApiClient, make_client, raw_request
+from bb.core.client import make_client, raw_request
 from bb.core.context import RepoContext, current_repo, current_branch
-from bb.core.errors import BBError
 from bb.core.out import print_json, print_table
 
 app = typer.Typer(help="Manage pipelines")

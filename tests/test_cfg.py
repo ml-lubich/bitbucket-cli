@@ -38,8 +38,7 @@ def test_auth_token_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_dotenv_fallback_reads_file(monkeypatch: pytest.MonkeyPatch, tmp_path: pytest.TempPathFactory) -> None:
     from pathlib import Path
     dotenv = Path(str(tmp_path)) / ".env"
-    dotenv.write_text("BB_TOKEN=dotenv-tok
-")
+    dotenv.write_text("BB_TOKEN=dotenv-tok\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("BB_TOKEN", raising=False)
     monkeypatch.delenv("BITBUCKET_TOKEN", raising=False)

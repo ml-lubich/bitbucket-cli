@@ -10,7 +10,6 @@ from typer.testing import CliRunner
 
 from bb.core.auth import Credential
 from bb.core.client import ApiClient
-from bb.core.context import RepoContext
 from bb.main import app
 
 runner = CliRunner()
@@ -87,7 +86,7 @@ def test_snippet_create_reads_real_file_and_passes_bytes(
         return {"id": "snip123"}
 
     monkeypatch.setattr("bb.commands.snippet.post_files", mock_post_files)
-    result = runner.invoke(app, ["snippet", "create", "--title", "T", "--file", str(fpath)])
+    runner.invoke(app, ["snippet", "create", "--title", "T", "--file", str(fpath)])
     assert captured_calls[0]["files"]["file"][1] == b"hello world"
 
 

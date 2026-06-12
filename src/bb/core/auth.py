@@ -84,7 +84,12 @@ def delete_credential(host: str = HOST) -> bool:
     if _entry_for_host(doc, host) is None:
         return False
     _del_host_entry(doc, host)
-    _write_hosts(doc)
+    path = _hosts_path()
+    if not doc.body or not any(isinstance(item[1], tomlkit.items.Table) for item in doc.body):
+        if path.exists():
+            path.unlink()
+    else:
+        _write_hosts(doc)
     return True
 
 

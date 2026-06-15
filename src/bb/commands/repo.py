@@ -16,7 +16,7 @@ from bb.core.client import make_client
 from bb.core.config import load_settings
 from bb.core.context import RepoContext, resolve_repo
 from bb.core.errors import BBError
-from bb.core.out import print_json, print_table
+from bb.core.output import print_json, print_table
 
 app = typer.Typer(help="Manage repositories", no_args_is_help=True)
 

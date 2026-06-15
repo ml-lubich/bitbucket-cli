@@ -28,12 +28,13 @@ def _mask(token: str) -> str:
 
 
 def _show_user_status(cred: Credential) -> None:
-    """Print display_name from GET /user; warn on failure."""
+    """Print display_name from GET /user; token present but rejected → exit 1."""
     try:
         name = _verify_user(cred)
         typer.echo(f"user:   {name}")
     except (ApiError, AuthError) as exc:
-        typer.echo(f"warning: {exc}", err=True)
+        typer.echo(f"error: token present but rejected: {exc}", err=True)
+        raise typer.Exit(1)
 
 
 @app.command()

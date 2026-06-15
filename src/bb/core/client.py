@@ -112,15 +112,28 @@ def make_client() -> ApiClient:
     return ApiClient(resolve_credential())
 
 
-def raw_request(method: str, path: str, fields: dict[str, str] | None = None) -> str:
-    """Raw text request — used for pipeline logs and other text endpoints."""
+def raw_request(
+    method: str,
+    path: str,
+    fields: dict[str, str] | None = None,
+    body: str = "",
+    transport: httpx.BaseTransport | None = None,
+) -> str:
+    """Raw text request — used for `bb api`, pipeline logs, other text endpoints."""
     from bb.core.auth import resolve_credential
     cred = resolve_credential()
     auth = _build_auth(cred)
-    with httpx.Client(base_url=BASE_URL, auth=auth, follow_redirects=True) as c:
-        resp = c.request(method.upper(), path, params=fields)
+    headers = {"Content-Type": "application/json"} if body else None
+    with _raw_client(auth, transport) as c:
+        resp = c.request(method.upper(), path, params=fields, content=body or None, headers=headers)
     _check_error(resp)
     return resp.text
+
+
+def _raw_client(auth: httpx.Auth, transport: httpx.BaseTransport | None) -> httpx.Client:
+    if transport:
+        return httpx.Client(base_url=BASE_URL, auth=auth, follow_redirects=True, transport=transport)
+    return httpx.Client(base_url=BASE_URL, auth=auth, follow_redirects=True)
 
 
 # BBClient alias for tests and new code

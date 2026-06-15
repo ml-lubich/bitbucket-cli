@@ -11,7 +11,7 @@ from typer.testing import CliRunner
 from bb.core.auth import Credential
 from bb.core.client import ApiClient
 from bb.core.context import RepoContext
-from bb.main import app
+from bb.cli import app
 
 runner = CliRunner()
 _CRED = Credential(host="bitbucket.org", token="x", auth_type="bearer", username="")

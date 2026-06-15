@@ -1,47 +1,69 @@
 # API Reference
 
-## Global flags
+## Global flags (root)
 
-| Flag | Short | Description |
-|---|---|---|
-| `--repo` | `-R` | Target repo as `workspace/slug`; overrides git-remote detection |
-| `--json` | | Emit raw JSON instead of formatted table |
-| `--version` | | Print version and exit |
-| `--help` | | Show help for any command or subcommand |
+| Flag | Description |
+|---|---|
+| `--version` | Print version string and exit |
+| `-h, --help` | Show help for any command or subcommand |
 
-## Config precedence (contract — changing order is breaking)
+### `bb help [COMMAND...]`
+
+Show root help or help for a nested command path.
+
+Examples:
+
+```bash
+bb help
+bb help repo
+bb help repo list
+```
+
+## Config precedence (contract — changing order is a breaking change)
 
 1. CLI arguments (highest)
-2. Environment variables (`BB_TOKEN`, `BB_REPO`, `BB_WORKSPACE`, `BB_EDITOR`)
-3. Project config (`bb.toml` at repo root or nearest ancestor with `.git`)
-4. User config (`config.toml` in platformdirs user config dir)
+2. Environment variables
+3. Project config (`bb.toml` at current working directory)
+4. User config (`config.toml` via `platformdirs.user_config_dir("bb")`)
 5. Hardcoded defaults (lowest)
 
 ## Config files
 
-| File | Location | Format |
+| File | Location (platform-resolved) | Format | Mode |
+|---|---|---|---|
+| User config | `platformdirs.user_config_dir("bb")/config.toml` | TOML | default |
+| Token store | `platformdirs.user_config_dir("bb")/hosts.toml` | TOML | 0600 |
+| Project config | `<cwd>/bb.toml` | TOML | default |
+
+## Config keys
+
+Valid keys for `bb config get/set` and both TOML config files:
+
+| Key | Default | Description |
 |---|---|---|
-| User config | `platformdirs.user_config_dir("bb")/config.toml` | TOML |
-| Token store | `platformdirs.user_config_dir("bb")/hosts.toml` | TOML, mode 0600 |
-| Project config | `<repo-root>/bb.toml` | TOML |
+| `git_protocol` | `https` | Clone protocol: `https` or `ssh` |
+| `editor` | `""` | Editor override; falls back to `$EDITOR` |
+| `default_repo` | `""` | Default repo as `workspace/slug` |
+| `default_workspace` | `""` | Default workspace slug |
 
 ## Environment variables
 
-| Variable | Description |
-|---|---|
-| `BB_TOKEN` | Bitbucket API token or app password (highest priority) |
-| `BITBUCKET_TOKEN` | Alternative token name |
-| `BITBUCKET_AUTH_TOKEN` | Alternative token name |
-| `BB_REPO` | Default repo `workspace/slug` |
-| `BB_WORKSPACE` | Default workspace slug |
-| `BB_EDITOR` | Editor override; falls back to `$EDITOR` |
+| Variable | Mapped key | Description |
+|---|---|---|
+| `BB_TOKEN` | — | Bitbucket API token or app password (token resolution, highest priority) |
+| `BITBUCKET_TOKEN` | — | Alternative token env name |
+| `BITBUCKET_AUTH_TOKEN` | — | Alternative token env name |
+| `BB_REPO` | `default_repo` | Default repo `workspace/slug` |
+| `BB_WORKSPACE` | `default_workspace` | Default workspace slug |
+| `BB_EDITOR` | `editor` | Editor override |
+| `BB_GIT_PROTOCOL` | `git_protocol` | Clone protocol override |
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | Any `BBError` subclass: auth failure, API error, context error, config error |
+| 1 | Any `BBError` subclass: `AuthError`, `ApiError`, `ContextError`, `ConfigError` |
 
 `ApiError` carries the HTTP status code in the error message text (e.g. `bb: API 404: ...`).
 
@@ -49,14 +71,15 @@
 
 ## auth
 
-### `bb auth login`
+### `bb auth login [OPTIONS]`
 
-Authenticate with a Bitbucket token or app password.
+Store a Bitbucket access token. Prompts securely if `--token` is omitted.
 
 | Flag | Description |
 |---|---|
-| `--token TEXT` | Token value to store (required) |
-| `--username TEXT` | Bitbucket username (optional; stored alongside token) |
+| `--token TEXT` | Token value; prompted securely if omitted |
+| `--username TEXT` | Username for basic auth (optional) |
+| `--no-verify` | Skip GET /user verification after storing token |
 
 Writes `hosts.toml` with mode 0600 in the platformdirs user config dir.
 
@@ -66,421 +89,494 @@ Remove stored credentials from `hosts.toml`.
 
 ### `bb auth status`
 
-Show current authentication state. Prints credential source and masked token. Exits 1 if not authenticated.
+Show current credential source and verify against the Bitbucket API. Exits 1 if not authenticated.
 
 ---
 
 ## pr
 
-### `bb pr list`
+All `pr` subcommands accept `-R / --repo TEXT` to override git-remote context.
 
-List pull requests for the current or specified repo.
+### `bb pr list [OPTIONS]`
 
 | Flag | Description |
 |---|---|
 | `-R, --repo TEXT` | Target repo `workspace/slug` |
 | `--state TEXT` | Filter: `OPEN` (default), `MERGED`, `DECLINED`, `SUPERSEDED` |
-| `--limit INT` | Maximum results (default 50) |
+| `--limit INTEGER` | Maximum results (default 30) |
+| `--reviewer TEXT` | Filter by reviewer username |
 | `--json` | JSON output |
 
-### `bb pr view <id>`
-
-Show pull request details.
+### `bb pr view <PR_ID> [OPTIONS]`
 
 | Flag | Description |
 |---|---|
+| `-R, --repo TEXT` | Target repo |
 | `--json` | JSON output |
+| `--web` | Open in browser instead of printing |
 
-### `bb pr create`
-
-Create a new pull request.
+### `bb pr create [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--title TEXT` | PR title (required) |
+| `-R, --repo TEXT` | Target repo |
+| `--title TEXT` | PR title |
 | `--body TEXT` | PR description |
-| `--source TEXT` | Source branch (default: current branch) |
-| `--dest TEXT` | Destination branch (default: repo default branch) |
-| `--reviewer TEXT` | Reviewer username; repeatable |
+| `--base TEXT` | Destination branch |
+| `--head TEXT` | Source branch |
 | `--draft` | Mark as draft |
+| `--close-source-branch` | Delete source branch after merge |
 
-### `bb pr checkout <id>`
+### `bb pr checkout <PR_ID> [OPTIONS]`
 
 Check out the source branch of a pull request locally.
 
-### `bb pr merge <id>`
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
 
-Merge a pull request.
+### `bb pr merge <PR_ID> [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--squash` | Squash commits |
-| `--ff` | Fast-forward merge |
-| `--message TEXT` | Merge commit message |
+| `-R, --repo TEXT` | Target repo |
+| `--merge-strategy TEXT` | `merge_commit` (default), `squash`, or `fast_forward` |
 | `--delete-branch` | Delete source branch after merge |
+| `--message TEXT` | Merge commit message |
 
-### `bb pr close <id>`
+### `bb pr close <PR_ID> [OPTIONS]`
 
-Decline (close) a pull request.
-
-### `bb pr reopen <id>`
-
-Not supported. Bitbucket Cloud API has no reopen endpoint. Exits 1 with a clear error.
-
-### `bb pr edit <id>`
-
-Edit pull request title or description.
+Decline a pull request.
 
 | Flag | Description |
 |---|---|
+| `-R, --repo TEXT` | Target repo |
+
+### `bb pr reopen <PR_ID> [OPTIONS]`
+
+Not supported. Bitbucket Cloud API has no reopen endpoint. Exits 1 with a documented error.
+
+### `bb pr edit <PR_ID> [OPTIONS]`
+
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
 | `--title TEXT` | New title |
 | `--body TEXT` | New description |
+| `--base TEXT` | New destination branch |
 
-### `bb pr review <id>`
-
-Submit a review decision.
+### `bb pr review <PR_ID> [OPTIONS]`
 
 | Flag | Description |
 |---|---|
+| `-R, --repo TEXT` | Target repo |
 | `--approve` | Approve the PR |
 | `--request-changes` | Request changes |
-| `--comment TEXT` | Comment text |
+| `--unapprove` | Remove approval |
+| `--body TEXT` | Review comment body |
 
-### `bb pr comment <id>`
+### `bb pr comment <PR_ID> [OPTIONS]`
 
-Add a comment to a pull request.
+| Flag | Required | Description |
+|---|---|---|
+| `-R, --repo TEXT` | no | Target repo |
+| `--body TEXT` | yes | Comment body |
 
-| Flag | Description |
-|---|---|
-| `--body TEXT` | Comment body (required) |
-
-### `bb pr diff <id>`
+### `bb pr diff <PR_ID> [OPTIONS]`
 
 Print the unified diff of a pull request.
 
-### `bb pr checks <id>`
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
 
-List build status checks for a pull request's source commit.
+### `bb pr checks <PR_ID> [OPTIONS]`
+
+Show build statuses for a pull request's source commit.
+
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
 
 ---
 
 ## repo
 
-### `bb repo list`
-
-List repositories for a workspace.
+### `bb repo list [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--workspace TEXT` | Workspace slug (default: config or git-remote) |
-| `--limit INT` | Maximum results (default 50) |
+| `-w, --workspace TEXT` | Workspace slug |
+| `--limit INTEGER` | Maximum results (default 30) |
+| `--role TEXT` | Filter by role |
 | `--json` | JSON output |
 
-### `bb repo view [workspace/slug]`
+### `bb repo view [workspace/slug] [OPTIONS]`
 
 Show repository details. Uses git-remote context if not specified.
 
-### `bb repo clone <workspace/slug>`
+| Flag | Description |
+|---|---|
+| `--web` | Open in browser instead of printing |
+
+### `bb repo clone <workspace/slug> [DIRECTORY]`
 
 Clone a repository. Respects `git_protocol` config key (`https` or `ssh`).
 
-### `bb repo create`
+### `bb repo create [OPTIONS]`
 
-Create a new repository.
+| Flag | Required | Description |
+|---|---|---|
+| `--name TEXT` | yes | Repository slug |
+| `-w, --workspace TEXT` | no | Target workspace |
+| `--private` / `--public` | no | Visibility (default: private) |
+| `--description TEXT` | no | Repository description |
+| `--project TEXT` | no | Project key to associate |
+
+### `bb repo fork <workspace/slug> [OPTIONS]`
+
+Fork a repository.
 
 | Flag | Description |
 |---|---|
-| `--name TEXT` | Repository slug (required) |
-| `--workspace TEXT` | Target workspace |
-| `--private` | Make private (default true) |
-| `--description TEXT` | Repository description |
+| `-w, --workspace TEXT` | Target workspace for the fork |
 
-### `bb repo fork [workspace/slug]`
+### `bb repo delete <workspace/slug> [OPTIONS]`
 
-Fork a repository into the authenticated user's workspace.
+Delete a repository. Prompts for confirmation unless `--yes`.
 
-### `bb repo delete [workspace/slug]`
-
-Delete a repository. Prompts for confirmation.
+| Flag | Description |
+|---|---|
+| `-y, --yes` | Skip confirmation prompt |
 
 ### `bb repo sync`
 
-Sync a forked repository with its upstream.
+Sync a forked repository with its upstream parent (git fetch + merge).
 
 ### `bb repo set-default <workspace/slug>`
 
-Write `default_workspace` and the repo slug into the project `bb.toml`.
+Write `default_repo` into `bb.toml` at the git repo root.
 
 ---
 
 ## issue
 
-Requires issue tracker enabled for the repository. Commands exit 1 with a clear message if the tracker is disabled (Bitbucket API returns 404 on the issues endpoint).
+Requires issue tracker enabled for the repository. Commands exit 1 with a
+clear message if the tracker is disabled (Bitbucket API returns 404).
 
-### `bb issue list`
+All `issue` subcommands accept `-R / --repo TEXT` (`workspace/slug`).
+
+### `bb issue list [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--state TEXT` | `new`, `open`, `resolved`, `on hold`, `invalid`, `duplicate`, `wontfix`, `closed` |
-| `--limit INT` | Maximum results (default 50) |
+| `-R, --repo TEXT` | Target repo `workspace/slug` |
+| `--state TEXT` | `open` (default), `new`, `resolved`, `on hold`, `invalid`, `duplicate`, `wontfix`, `closed` |
+| `--limit INTEGER` | Max results (default 30) |
 | `--json` | JSON output |
 
-### `bb issue view <id>`
-
-Show issue details.
-
-### `bb issue create`
+### `bb issue view <ISSUE_ID> [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--title TEXT` | Issue title (required) |
-| `--body TEXT` | Issue description |
-| `--kind TEXT` | `bug`, `enhancement`, `proposal`, `task` |
-| `--priority TEXT` | `trivial`, `minor`, `major`, `critical`, `blocker` |
+| `-R, --repo TEXT` | Target repo |
+| `--json` | JSON output |
 
-### `bb issue edit <id>`
+### `bb issue create [OPTIONS]`
 
-Edit issue fields.
+| Flag | Required | Description |
+|---|---|---|
+| `-R, --repo TEXT` | no | Target repo |
+| `--title TEXT` | yes | Issue title |
+| `--body TEXT` | no | Issue body |
+| `--kind TEXT` | no | `bug` (default), `enhancement`, `proposal`, `task` |
+| `--priority TEXT` | no | `major` (default), `trivial`, `minor`, `critical`, `blocker` |
+
+### `bb issue edit <ISSUE_ID> [OPTIONS]`
 
 | Flag | Description |
 |---|---|
+| `-R, --repo TEXT` | Target repo |
 | `--title TEXT` | New title |
 | `--body TEXT` | New description |
-| `--state TEXT` | New state |
+| `--kind TEXT` | New kind |
+| `--priority TEXT` | New priority |
 
-### `bb issue close <id>`
+### `bb issue close <ISSUE_ID> [OPTIONS]`
 
 Set issue state to `resolved`.
 
-### `bb issue reopen <id>`
+### `bb issue reopen <ISSUE_ID> [OPTIONS]`
 
 Set issue state to `open`.
 
-### `bb issue comment <id>`
+### `bb issue comment <ISSUE_ID> [OPTIONS]`
 
-Add a comment.
+| Flag | Required | Description |
+|---|---|---|
+| `-R, --repo TEXT` | no | Target repo |
+| `--body TEXT` | yes | Comment body |
+
+### `bb issue delete <ISSUE_ID> [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--body TEXT` | Comment body (required) |
-
-### `bb issue delete <id>`
-
-Delete an issue. Prompts for confirmation.
+| `-R, --repo TEXT` | Target repo |
+| `-y, --yes` | Skip confirmation prompt |
 
 ---
 
 ## pipeline
 
-### `bb pipeline list`
+All `pipeline` subcommands accept `-R / --repo TEXT` (`workspace/slug`).
 
-List pipeline runs.
+### `bb pipeline list [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--branch TEXT` | Filter by branch |
-| `--limit INT` | Maximum results (default 20) |
+| `-R, --repo TEXT` | Target repo |
+| `--limit INTEGER` | Max results (default 20) |
 | `--json` | JSON output |
 
-### `bb pipeline run`
+### `bb pipeline run [OPTIONS]`
 
-Trigger a pipeline.
-
-| Flag | Description |
-|---|---|
-| `--branch TEXT` | Branch to run on (default: current branch) |
-| `--pattern TEXT` | Custom pipeline pattern name |
-
-### `bb pipeline view <uuid>`
-
-Show pipeline details. UUID may be passed with or without braces.
-
-### `bb pipeline steps <uuid>`
-
-List steps for a pipeline run.
-
-### `bb pipeline logs <uuid>`
-
-Stream or print logs for a pipeline.
+Trigger a pipeline run.
 
 | Flag | Description |
 |---|---|
-| `--step INT` | Step index (default 0) |
+| `-R, --repo TEXT` | Target repo |
+| `--branch TEXT` | Branch to run (default: current branch) |
 
-### `bb pipeline stop <uuid>`
+### `bb pipeline view <UUID> [OPTIONS]`
+
+Show pipeline details.
+
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
+| `--json` | JSON output |
+
+### `bb pipeline steps <UUID> [OPTIONS]`
+
+List pipeline steps.
+
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
+| `--json` | JSON output |
+
+### `bb pipeline logs <UUID> [OPTIONS]`
+
+Print pipeline step logs.
+
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
+| `--step TEXT` | Step UUID (omit to print all steps) |
+
+### `bb pipeline stop <UUID> [OPTIONS]`
 
 Stop a running pipeline.
+
+| Flag | Description |
+|---|---|
+| `-R, --repo TEXT` | Target repo |
 
 ---
 
 ## branch
 
-### `bb branch list`
+All `branch` subcommands accept `-R / --repo TEXT`.
 
-List branches.
+### `bb branch list [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--limit INT` | Maximum results (default 50) |
+| `-R, --repo TEXT` | Target repo |
+| `--limit INTEGER` | Max results (default 30) |
 | `--json` | JSON output |
 
-### `bb branch create <name>`
+### `bb branch create <NAME> [OPTIONS]`
 
-Create a branch from the current or specified source.
+Create a branch.
 
 | Flag | Description |
 |---|---|
-| `--source TEXT` | Source commit or branch (default: default branch) |
+| `-R, --repo TEXT` | Target repo |
+| `--from TEXT` | Source commit or branch |
 
-### `bb branch delete <name>`
+### `bb branch delete <NAME> [OPTIONS]`
 
 Delete a branch.
 
 | Flag | Description |
 |---|---|
-| `--force` | Force delete |
+| `-R, --repo TEXT` | Target repo |
+| `-y, --yes` | Skip confirmation prompt |
 
 ---
 
 ## workspace
 
-### `bb workspace list`
+### `bb workspace list [OPTIONS]`
 
-List workspaces the authenticated user belongs to.
+List all workspaces the authenticated user belongs to.
 
-### `bb workspace view <slug>`
+| Flag | Description |
+|---|---|
+| `--json` | JSON output |
 
-Show workspace details.
+### `bb workspace view <SLUG>`
 
-### `bb workspace members <slug>`
+Show details for a workspace.
 
-List workspace members.
+### `bb workspace members <SLUG> [OPTIONS]`
+
+List members of a workspace.
+
+| Flag | Description |
+|---|---|
+| `--json` | JSON output |
 
 ---
 
 ## project
 
-### `bb project list`
+### `bb project list [OPTIONS]`
 
 List projects in a workspace.
 
 | Flag | Description |
 |---|---|
-| `--workspace TEXT` | Workspace slug |
+| `-w, --workspace TEXT` | Workspace slug |
+| `--json` | JSON output |
 
-### `bb project view <key>`
+### `bb project view <KEY> [OPTIONS]`
 
 Show project details by project key.
 
-### `bb project create`
-
-Create a project in a workspace.
-
 | Flag | Description |
 |---|---|
-| `--workspace TEXT` | Workspace slug (required) |
-| `--name TEXT` | Project name (required) |
-| `--key TEXT` | Project key, e.g. `PROJ` (required) |
-| `--private` | Make private (default true) |
+| `-w, --workspace TEXT` | Workspace slug |
+
+### `bb project create [OPTIONS]`
+
+| Flag | Required | Description |
+|---|---|---|
+| `--key TEXT` | yes | Project key (e.g. `PROJ`) |
+| `--name TEXT` | yes | Project name |
+| `-w, --workspace TEXT` | no | Workspace slug |
+| `--private` / `--public` | no | Visibility (default: private) |
+| `--description TEXT` | no | Project description |
 
 ---
 
 ## snippet
 
-### `bb snippet list`
-
-List snippets for the authenticated user or a workspace.
-
-### `bb snippet view <id>`
-
-Show snippet content and metadata.
-
-### `bb snippet create`
-
-Create a snippet.
+### `bb snippet list [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--title TEXT` | Snippet title |
-| `--file PATH` | File to upload (repeatable) |
-| `--private` | Make private |
+| `--role TEXT` | `owner` (default), `contributor`, `member` |
+| `--json` | JSON output |
 
-### `bb snippet edit <id>`
-
-Update snippet files.
+### `bb snippet view <WORKSPACE> <SNIP_ID> [OPTIONS]`
 
 | Flag | Description |
 |---|---|
-| `--file PATH` | Replacement file |
+| `--raw` | Print raw file content |
+| `--file TEXT` | File name within the snippet (used with `--raw`) |
 
-### `bb snippet delete <id>`
+### `bb snippet create [OPTIONS]`
 
-Delete a snippet.
+| Flag | Required | Description |
+|---|---|---|
+| `--title TEXT` | yes | Snippet title |
+| `--file TEXT` | yes | Path to file to upload |
+| `--private` / `--public` | no | Visibility (default: private) |
+
+### `bb snippet edit <WORKSPACE> <SNIP_ID> [OPTIONS]`
+
+Edit a snippet (title only).
+
+| Flag | Description |
+|---|---|
+| `--title TEXT` | New title |
+
+### `bb snippet delete <WORKSPACE> <SNIP_ID> [OPTIONS]`
+
+| Flag | Description |
+|---|---|
+| `-y, --yes` | Skip confirmation prompt |
 
 ---
 
 ## api
 
-### `bb api <endpoint>`
+### `bb api [ENDPOINT] [OPTIONS]`
 
-Send an authenticated request to the Bitbucket Cloud API.
+Make a raw authenticated request to the Bitbucket Cloud API 2.0 and print JSON.
 
-| Flag | Description |
+| Argument / Flag | Description |
 |---|---|
-| `--method TEXT` | HTTP method: `GET` (default), `POST`, `PATCH`, `PUT`, `DELETE` |
-| `--field KEY=VALUE` | JSON body field; repeatable |
-| `--input FILE` | Read JSON body from file |
+| `ENDPOINT` | API path, e.g. `/2.0/repositories/myworkspace/my-repo` |
+| `-X, --method TEXT` | HTTP method: `GET` (default), `POST`, `PUT`, `DELETE`, `PATCH` |
+| `-f, --field TEXT` | `key=value` body field; repeatable |
+| `--paginate` | Follow `next` page links and aggregate results |
+| `--input TEXT` | JSON body from file |
 
-Endpoint should be a full Bitbucket API 2.0 path, e.g. `/2.0/repositories/myworkspace/my-repo`.
-Output is raw JSON.
-
----
-
-## config
-
-### `bb config get <key>`
-
-Print the resolved value for a config key.
-
-### `bb config set <key> <value>`
-
-Write a key-value pair to the user config file.
-
-Valid keys: `git_protocol`, `editor`, `default_workspace`.
+Subcommand alias: `bb api request` is equivalent to `bb api`.
 
 ---
 
 ## browse
 
-### `bb browse`
+### `bb browse [OPTIONS]`
 
 Open the current repository in the system browser.
 
 | Flag | Description |
 |---|---|
-| `--pr INT` | Open a specific pull request |
-| `--issue INT` | Open a specific issue |
-| `--pipeline TEXT` | Open a specific pipeline UUID |
-| `--branch TEXT` | Open a specific branch view |
+| `-r, --repo TEXT` | workspace/slug override |
+| `-b, --branch TEXT` | Open branch view |
+| `--no-open` | Print URL only; do not open browser |
+
+---
+
+## config
+
+### `bb config get <KEY>`
+
+Print the resolved value for a config key from the user config file.
+
+### `bb config set <KEY> <VALUE>`
+
+Write a key-value pair to the user config file (`config.toml` via platformdirs).
+
+Valid keys: `git_protocol`, `editor`, `default_repo`, `default_workspace`.
 
 ---
 
 ## completion
 
-### `bb completion bash`
+### `bb completion <SHELL>`
 
-Print bash completion script.
+Print shell completion script for the given shell.
 
-### `bb completion zsh`
+Supported shells: `bash`, `zsh`, `fish`, `powershell`.
 
-Print zsh completion script.
+Source the output in your shell profile to enable tab completion:
 
-### `bb completion fish`
+```bash
+# zsh
+eval "$(bb completion zsh)"
 
-Print fish completion script.
+# bash
+eval "$(bb completion bash)"
 
-### `bb completion powershell`
+# fish
+bb completion fish | source
 
-Print PowerShell completion script.
-
-Source the output in your shell profile to enable tab completion.
+# PowerShell
+Invoke-Expression (bb completion powershell)
+```

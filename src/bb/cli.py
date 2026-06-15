@@ -7,9 +7,12 @@ Failure: BBError subclasses exit with their exit_code (default 1).
 """
 from __future__ import annotations
 
-from typing import Optional
+from collections.abc import Mapping
+from typing import Optional, cast
 
 import typer
+from typer._click.core import Command, Context
+from typer._click.exceptions import ClickException
 
 from bb import __version__
 from bb.commands import (
@@ -39,10 +42,18 @@ _GROUPS: dict[str, typer.Typer] = {
     "project": project.app,
     "snippet": snippet.app,
     "config": config_cmd.app,
-    "api": api.app,
+}
+_HELP_OPTIONS: dict[str, object] = {"help_option_names": ["-h", "--help"]}
+_HELP_COMMAND_CONTEXT: dict[str, object] = _HELP_OPTIONS | {
+    "allow_extra_args": True,
+    "ignore_unknown_options": True,
 }
 
-app = typer.Typer(no_args_is_help=True, help="bb — Bitbucket Cloud CLI")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="bb — Bitbucket Cloud CLI",
+    context_settings=_HELP_OPTIONS,
+)
 
 _SHELLS = ("bash", "zsh", "fish", "powershell")
 
@@ -78,6 +89,14 @@ def completion(
     typer.echo(_build_completion(_shell))
 
 
+@app.command("help", context_settings=_HELP_COMMAND_CONTEXT)
+def help_cmd(ctx: typer.Context) -> None:
+    """Show help for bb or a nested command."""
+    root_ctx = _get_root_ctx(ctx)
+    command, help_ctx = _find_help_target(root_ctx, list(ctx.args))
+    typer.echo(command.get_help(help_ctx))
+
+
 def _build_completion(shell: str) -> str:
     scripts = {
         "zsh": (
@@ -103,10 +122,60 @@ def _build_completion(shell: str) -> str:
     return scripts[shell]
 
 
+def _get_root_ctx(ctx: typer.Context) -> Context:
+    if ctx.parent is None:
+        raise ClickException("help context is missing a parent command")
+    return ctx.parent
+
+
+def _find_help_target(
+    root_ctx: Context,
+    args: list[str],
+) -> tuple[Command, Context]:
+    command = root_ctx.command
+    help_ctx = root_ctx
+    for arg in args:
+        command = _get_subcommand(command, arg)
+        help_ctx = Context(command, info_name=arg, parent=help_ctx)
+    return command, help_ctx
+
+
+def _get_subcommand(command: Command, arg: str) -> Command:
+    commands = _get_commands(command, arg)
+    subcommand = commands.get(arg)
+    if subcommand is None:
+        raise ClickException(f"unknown command {arg!r}")
+    return subcommand
+
+
+def _get_commands(command: Command, arg: str) -> Mapping[str, Command]:
+    commands = getattr(command, "commands", {})
+    if not isinstance(commands, dict):
+        raise ClickException(f"{arg!r} is not a command group")
+    return cast(Mapping[str, Command], commands)
+
+
+def _merge_help_context(settings: object) -> dict[str, object]:
+    if isinstance(settings, dict):
+        return settings | _HELP_OPTIONS
+    return _HELP_OPTIONS.copy()
+
+
+def _apply_help_options(typer_app: typer.Typer) -> None:
+    typer_app.info.context_settings = _merge_help_context(typer_app.info.context_settings)
+    for command in typer_app.registered_commands:
+        command.context_settings = _merge_help_context(command.context_settings)
+    for group in typer_app.registered_groups:
+        group.context_settings = _merge_help_context(group.context_settings)
+        _apply_help_options(group.typer_instance)
+
+
 def _register_groups() -> None:
     for name, sub in _GROUPS.items():
         app.add_typer(sub, name=name)
     app.command("browse")(browse.browse)
+    app.command("api")(api.api_cmd)
+    _apply_help_options(app)
 
 
 _register_groups()

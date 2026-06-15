@@ -1,164 +1,209 @@
 # bb — Bitbucket Cloud CLI
 
-bb is a lightweight, gh-style command-line client for Bitbucket Cloud with token authentication.
+A lightweight, gh-style command-line client for Bitbucket Cloud with token
+authentication, plain-text table output, and a `--json` flag on every
+list/view command.
 
-## Setup (macOS / Linux)
+---
+
+## Setup
+
+### From source (development or local install)
 
 ```bash
-./scripts/setup.sh
+git clone https://github.com/ml-lubich/bitbucket-cli
+cd bitbucket-cli
+./scripts/setup.sh        # installs uv if missing, then runs uv sync
+UV_PROJECT_ENVIRONMENT=venv uv run bb --help
 ```
 
-This installs `uv` if missing, then runs `uv sync` from the repo root. Safe to re-run after `git pull`.
+`scripts/setup.sh` is idempotent — safe to re-run after `git pull` or after
+wiping the virtualenv. It creates `venv/` instead of `.venv/` so macOS hidden
+file flags cannot break editable-install `.pth` loading.
 
-**Fallback only** — if `uv` is unavailable and you cannot run the script:
+### Global install (adds `bb` to PATH)
+
+```bash
+uv tool install .
+bb --help
+```
+
+### Fallback only — if `uv` is not available
 
 ```bash
 pip install -e .
 ```
 
-Label this "fallback only"; the documented and supported path is `./scripts/setup.sh`.
+---
 
 ## Authentication
 
-Log in by pasting a Bitbucket API token or app password:
+`bb` resolves credentials in this order (first match wins):
+
+| Priority | Source | Example |
+|---|---|---|
+| 1 | `BB_TOKEN` env var | `export BB_TOKEN="${YOUR_TOKEN}"` |
+| 2 | `BITBUCKET_TOKEN` env var | `export BITBUCKET_TOKEN="${YOUR_TOKEN}"` |
+| 3 | `BITBUCKET_AUTH_TOKEN` env var | `export BITBUCKET_AUTH_TOKEN="${YOUR_TOKEN}"` |
+| 4 | Repo-local `.env` file | `BB_TOKEN="${YOUR_TOKEN}"` line in `.env` |
+| 5 | `hosts.toml` (written by `bb auth login`, mode 0600) | — |
+
+**Interactive login:**
 
 ```bash
-uv run bb auth login --token ${BB_TOKEN}
+bb auth login                        # prompts securely for token
+bb auth login --token "${YOUR_TOKEN}"  # pass token directly (env var recommended)
+bb auth status                       # verify stored credential
 ```
 
-**Token sources** (highest to lowest priority):
+**App passwords (username + password):** Atlassian API tokens (the `ATATT...`
+format) require HTTP Basic auth with your Bitbucket account email as the
+username. Pass `--username` to `bb auth login` or set `BITBUCKET_EMAIL` /
+`BB_USERNAME` alongside the token env var.
 
-| Source | Description |
-|---|---|
-| `BB_TOKEN` env var | Highest priority — overrides everything |
-| `BITBUCKET_TOKEN` env var | Alternative env name |
-| `BITBUCKET_AUTH_TOKEN` env var | Alternative env name |
-| Repo-local `.env` file | `BB_TOKEN=...` line; parsed at startup; never echoed |
-| `hosts.toml` (platformdirs) | Written by `bb auth login`; mode 0600 |
+**Never commit tokens.** Use environment variables or CI secret stores.
 
-Tokens are stored in the platform user-config directory (e.g. `~/.config/bb/hosts.toml` on Linux, `~/Library/Application Support/bb/hosts.toml` on macOS) with permissions 0600.
+---
 
-**NEVER commit tokens.** Use `${BB_TOKEN}` placeholders in scripts and CI secrets.
-
-Create tokens at: Bitbucket → Personal settings → API tokens (or App passwords).
-Required scopes depend on commands used: `repository`, `pullrequest`, `pipeline`, `issue`, `snippet`, `project`, `workspace:read`.
-
-## Usage
-
-### Command groups
-
-| Group | Description |
-|---|---|
-| `auth` | Authenticate and manage credentials |
-| `pr` | Pull request lifecycle |
-| `repo` | Repository management |
-| `issue` | Issue tracker |
-| `pipeline` | CI/CD pipelines |
-| `branch` | Branch management |
-| `workspace` | Workspace listing and members |
-| `project` | Workspace projects |
-| `snippet` | Bitbucket snippets |
-| `api` | Raw authenticated API requests |
-| `config` | Read and write local/user config |
-| `browse` | Open resource URLs in browser |
-| `completion` | Shell completion scripts |
-
-### Examples
+## Quick start
 
 ```bash
-# List open pull requests for the current repo
-uv run bb pr list
+# Authenticate
+UV_PROJECT_ENVIRONMENT=venv uv run bb auth login
 
-# Create a pull request
-uv run bb pr create --title "Fix login redirect" --body "Resolves #42"
+# Pull requests
+UV_PROJECT_ENVIRONMENT=venv uv run bb pr list
+UV_PROJECT_ENVIRONMENT=venv uv run bb pr list --state MERGED --limit 10
+UV_PROJECT_ENVIRONMENT=venv uv run bb pr create --title "Fix login bug"
+UV_PROJECT_ENVIRONMENT=venv uv run bb pr merge 42 --merge-strategy squash --delete-branch
 
-# Merge a pull request (squash)
-uv run bb pr merge 17 --squash
+# Repositories
+UV_PROJECT_ENVIRONMENT=venv uv run bb repo list --workspace myteam
+UV_PROJECT_ENVIRONMENT=venv uv run bb repo clone myteam/myrepo
+UV_PROJECT_ENVIRONMENT=venv uv run bb repo create --name new-service --workspace myteam
 
-# Review a pull request
-uv run bb pr review 17 --approve
+# Issues
+UV_PROJECT_ENVIRONMENT=venv uv run bb issue list
+UV_PROJECT_ENVIRONMENT=venv uv run bb issue create --title "Crash on startup" --kind bug --priority critical
+UV_PROJECT_ENVIRONMENT=venv uv run bb issue close 7
 
-# List pipelines
-uv run bb pipeline list
-
-# Stream logs for a pipeline step
-uv run bb pipeline logs abc123 --step 0
-
-# Create an issue
-uv run bb issue create --title "Button misaligned on mobile" --body "See screenshot"
-
-# Clone a repo (uses git_protocol from config, default https)
-uv run bb repo clone myworkspace/my-repo
-
-# Raw API call
-uv run bb api /2.0/repositories/myworkspace/my-repo
-
-# Output as JSON
-uv run bb pr list --json
+# Pipelines
+UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline list
+UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline run --branch main
+UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline logs abc-uuid-1234
 ```
+
+---
+
+## Command reference
+
+| Group | Subcommands |
+|---|---|
+| `auth` | `login`, `logout`, `status` |
+| `pr` | `list`, `view`, `create`, `checkout`, `merge`, `close`, `reopen`, `edit`, `review`, `comment`, `diff`, `checks` |
+| `repo` | `list`, `view`, `clone`, `create`, `fork`, `delete`, `sync`, `set-default` |
+| `issue` | `list`, `view`, `create`, `edit`, `close`, `reopen`, `comment`, `delete` |
+| `pipeline` | `list`, `run`, `view`, `steps`, `logs`, `stop` |
+| `branch` | `list`, `create`, `delete` |
+| `workspace` | `list`, `view`, `members` |
+| `project` | `list`, `view`, `create` |
+| `snippet` | `list`, `view`, `create`, `edit`, `delete` |
+| `config` | `get`, `set` |
+| `api` | (top-level command — raw authenticated API request) |
+| `browse` | (top-level command — open repo in browser) |
+| `completion` | (top-level command — print shell completion script) |
+
+Run `bb help`, `bb -h`, or `bb --help` for root help. Run
+`bb help <group>`, `bb <group> -h`, or `bb <group> --help` for group flags.
+Run `bb help <group> <subcommand>` or `bb <group> <subcommand> -h` for
+per-subcommand flags.
+
+---
 
 ## gh → bb mapping
 
-| gh command | bb equivalent |
+| `gh` command | `bb` equivalent |
 |---|---|
 | `gh auth login` | `bb auth login` |
+| `gh auth status` | `bb auth status` |
+| `gh auth logout` | `bb auth logout` |
 | `gh pr list` | `bb pr list` |
 | `gh pr create` | `bb pr create` |
-| `gh pr merge` | `bb pr merge` |
-| `gh repo clone` | `bb repo clone` |
-| `gh issue create` | `bb issue create` |
+| `gh pr merge` | `bb pr merge <ID>` |
+| `gh pr review --approve` | `bb pr review <ID> --approve` |
+| `gh pr checks` | `bb pr checks <ID>` |
+| `gh pr diff` | `bb pr diff <ID>` |
+| `gh pr close` | `bb pr close <ID>` |
+| `gh pr edit` | `bb pr edit <ID>` |
+| `gh pr comment --body "…"` | `bb pr comment <ID> --body "…"` |
+| `gh repo list` | `bb repo list` |
+| `gh repo clone` | `bb repo clone workspace/slug` |
+| `gh repo create` | `bb repo create --name myrepo` |
+| `gh repo fork` | `bb repo fork workspace/slug` |
+| `gh repo delete` | `bb repo delete workspace/slug` |
+| `gh issue list` | `bb issue list` |
+| `gh issue create` | `bb issue create --title "…"` |
+| `gh issue close` | `bb issue close <ID>` |
 | `gh run list` | `bb pipeline list` |
-| `gh api /repos/...` | `bb api /2.0/repositories/...` |
+| `gh run view` | `bb pipeline view <UUID>` |
+| `gh workflow run` | `bb pipeline run` |
+| `gh api /repos/…` | `bb api /repositories/…` |
+| `gh browse` | `bb browse` |
+| `gh completion -s bash` | `bb completion bash` |
 
-Note: Bitbucket does not support `pr reopen` — `bb pr reopen` surfaces a documented error.
+**Bitbucket-specific differences:**
 
-## 4-Eyes Verification
+- `bb pr reopen` is not supported — Bitbucket Cloud has no API endpoint to
+  reopen a declined PR. The command exits 1 with a clear message.
+- Pipeline references use UUIDs, not numeric run IDs.
+- Bitbucket issue `--kind` values: `bug`, `enhancement`, `proposal`, `task`.
 
-- [ ] Run `./scripts/setup.sh` — exits 0, prints "Setup complete."
-- [ ] Run `uv run pytest` — all tests pass, exit 0
-- [ ] Run `uv run bb --help` — command groups listed, no traceback
-- [ ] Run `uv run bb auth status` with no token configured — prints clean "Not logged in" message, exits 1
-- [ ] Review all output: no token value (raw string) appears anywhere — only masked or absent
+---
 
-## Config Keys
+## Configuration
 
-### Precedence (highest wins)
+`bb` uses a documented precedence chain (changing order is a breaking change):
 
-1. CLI arguments (`--repo`, `--json`, etc.)
-2. Environment variables (`BB_TOKEN`, `BB_REPO`, `BB_WORKSPACE`, `BB_EDITOR`)
-3. Project config (`bb.toml` at repo root or any ancestor up to `.git`)
-4. User config (`config.toml` via platformdirs user config dir)
-5. Hardcoded defaults
+| Priority | Source |
+|---|---|
+| 1 (highest) | CLI arguments (`--repo`, `--workspace`, etc.) |
+| 2 | Environment variables (`BB_REPO`, `BB_WORKSPACE`, `BB_EDITOR`, `BB_GIT_PROTOCOL`) |
+| 3 | Project config (`bb.toml` at current working directory) |
+| 4 | User config (`config.toml` via `platformdirs.user_config_dir("bb")`) |
+| 5 (lowest) | Hardcoded defaults |
 
-Changing this order is a breaking change — documented here as the contract.
-
-### Config file keys
+**Config keys** (valid for both `bb.toml` and `config.toml`):
 
 | Key | Default | Description |
 |---|---|---|
 | `git_protocol` | `https` | Clone protocol: `https` or `ssh` |
-| `editor` | `""` (inherits `$EDITOR`) | Editor for compose flows |
-| `default_workspace` | `""` | Default Bitbucket workspace slug |
+| `editor` | `""` | Editor for interactive prompts; falls back to `$EDITOR` |
+| `default_repo` | `""` | Default repo as `workspace/slug` |
+| `default_workspace` | `""` | Default workspace slug |
 
-Set a key:
+Read or write user config:
 
 ```bash
-uv run bb config set git_protocol ssh
-uv run bb config set default_workspace myworkspace
+bb config get git_protocol
+bb config set git_protocol ssh
+bb config set default_workspace myteam
 ```
 
-### Environment variables
+Set a project-level default repo:
 
-| Variable | Description |
-|---|---|
-| `BB_TOKEN` | Bitbucket API token or app password |
-| `BITBUCKET_TOKEN` | Alternative token env name |
-| `BITBUCKET_AUTH_TOKEN` | Alternative token env name |
-| `BB_REPO` | Default repo in `workspace/slug` form |
-| `BB_WORKSPACE` | Default workspace slug |
-| `BB_EDITOR` | Editor override (falls back to `$EDITOR`) |
+```bash
+bb repo set-default myteam/myrepo   # writes default_repo to bb.toml at git root
+```
 
-## Links
+**`BB_REPO` override:** set `BB_REPO=workspace/slug` to pin the target repo
+in any environment (CI, scripts, or when running outside a git clone).
+
+**`NO_COLOR`:** when set to any non-empty value, `rich` disables all terminal
+color codes. Useful in CI or scripts that parse `bb` output.
+
+---
+
+## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [API reference](docs/API.md)

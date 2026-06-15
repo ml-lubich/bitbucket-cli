@@ -11,7 +11,7 @@ from typing import Any
 import typer
 
 from bb.core.client import make_client
-from bb.core.out import print_json, print_table
+from bb.core.output import print_json, print_table
 
 app = typer.Typer(help="Manage workspaces", no_args_is_help=True)
 

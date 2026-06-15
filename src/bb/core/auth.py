@@ -20,6 +20,9 @@ from bb.core.errors import AuthError
 
 HOST = "bitbucket.org"
 TOKEN_VARS = ("BB_TOKEN", "BITBUCKET_TOKEN", "BITBUCKET_AUTH_TOKEN")
+# Atlassian account API tokens (ATATT…) only work as Basic auth with the
+# account email — an email var upgrades env/.env tokens to basic.
+EMAIL_VARS = ("BITBUCKET_EMAIL", "BB_USERNAME")
 
 
 # ── New API (used by ApiClient, commands) ─────────────────────────────────────
@@ -128,7 +131,7 @@ def credential_source() -> str:
     for name in TOKEN_VARS:
         if os.environ.get(name):
             return f"env:{name}"
-    if _hosts_token():
+    if _cred_from_file(HOST):
         return "hosts.toml"
     return "none"
 
@@ -172,11 +175,26 @@ def _write_hosts(doc: tomlkit.TOMLDocument) -> None:
     path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 
+def _email_value(pairs: dict[str, str]) -> str:
+    for name in EMAIL_VARS:
+        val = os.environ.get(name, "") or pairs.get(name, "")
+        if val:
+            return val
+    return ""
+
+
+def _with_email(token: str, source: str, pairs: dict[str, str]) -> Credential:
+    email = _email_value(pairs)
+    if email:
+        return Credential(token=token, auth_type="basic", username=email, source=source)
+    return Credential(token=token, source=source)
+
+
 def _env_token() -> Credential | None:
     for name in TOKEN_VARS:
         val = os.environ.get(name, "")
         if val:
-            return Credential(token=val, source=f"env:{name}")
+            return _with_email(val, f"env:{name}", _denv_pairs())
     return None
 
 
@@ -208,20 +226,24 @@ def _read_denv(path: Path) -> dict[str, str]:
         key, _, val = stripped.partition("=")
         key = key.strip()
         val = val.strip().strip('"').strip("'")
-        if key in TOKEN_VARS:
+        if key in TOKEN_VARS or key in EMAIL_VARS:
             result[key] = val
     return result
 
 
-def _denv_token() -> Credential | None:
+def _denv_pairs() -> dict[str, str]:
     path = _find_dotenv()
     if path is None:
-        return None
-    pairs = _read_denv(path)
+        return {}
+    return _read_denv(path)
+
+
+def _denv_token() -> Credential | None:
+    pairs = _denv_pairs()
     for name in TOKEN_VARS:
         val = pairs.get(name, "")
         if val:
-            return Credential(token=val, source=f"dotenv:{name}")
+            return _with_email(val, f"dotenv:{name}", pairs)
     return None
 
 

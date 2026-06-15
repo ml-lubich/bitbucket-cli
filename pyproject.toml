@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "bitbucket-cli"
-version = "0.1.0"
+version = "0.1.2"
+description = "Lightweight gh-style CLI for Bitbucket Cloud"
 requires-python = ">=3.12"
 authors = [
-    {name = "Misha Lubich", email = "mlubich@polariswireless.com"},
+    {name = "Misha Lubich", email = "mlubich@users.noreply.github.com"},
 ]
 license = {text = "MIT"}
 dependencies = [

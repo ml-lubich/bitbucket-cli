@@ -6,32 +6,74 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-14
+
+### Changed
+
+- Bumped package version to 0.1.2.
+- Replaced the package author email with the public GitHub noreply address for
+  open-source publishing.
+- Added `bb help [COMMAND...]` and `-h` as a short help alias across root,
+  command groups, and subcommands.
+- Added a `raw_request()` transport seam so raw API, pipeline log, and snippet
+  raw-content paths can be tested through `httpx.MockTransport` without live
+  Bitbucket access or `httpx.Client` monkeypatching.
+- Documented the supported `UV_PROJECT_ENVIRONMENT=venv uv run ...` execution
+  path used by `scripts/setup.sh`.
+
 ## [0.1.0] - 2026-06-11
 
 ### Added
 
-- Token authentication: `bb auth login --token`, `bb auth logout`, `bb auth status`.
-  - Token sources (priority order): `BB_TOKEN` env > `BITBUCKET_TOKEN` env > `BITBUCKET_AUTH_TOKEN` env > repo-local `.env` > `hosts.toml` (mode 0600, platformdirs).
+- Token authentication: `bb auth login` (prompts securely or accepts `--token`),
+  `bb auth logout`, `bb auth status`.
+  - `--username TEXT` flag on `auth login` for basic auth.
+  - `--no-verify` flag to skip GET /user verification after storing.
+  - Token resolution order: `BB_TOKEN` env > `BITBUCKET_TOKEN` env >
+    `BITBUCKET_AUTH_TOKEN` env > repo-local `.env` file > `hosts.toml`
+    (mode 0600, platformdirs user config dir).
   - Credentials never echoed; `masked()` used for any display reference.
-- Pull request commands: `pr list`, `pr view`, `pr create`, `pr checkout`, `pr merge`, `pr close`, `pr edit`, `pr review`, `pr comment`, `pr diff`, `pr checks`.
+- Pull request commands: `pr list`, `pr view`, `pr create`, `pr checkout`,
+  `pr merge`, `pr close`, `pr edit`, `pr review`, `pr comment`, `pr diff`,
+  `pr checks`.
+  - `pr list` supports `--state`, `--limit`, `--reviewer`, `--json`.
+  - `pr create` supports `--base`, `--head`, `--draft`, `--close-source-branch`.
+  - `pr merge` supports `--merge-strategy` (merge_commit / squash / fast_forward),
+    `--delete-branch`, `--message`.
+  - `pr review` supports `--approve`, `--request-changes`, `--unapprove`, `--body`.
   - `pr reopen` surfaces a documented error (Bitbucket Cloud API has no reopen endpoint).
-- Repository commands: `repo list`, `repo view`, `repo clone`, `repo create`, `repo fork`, `repo delete`, `repo sync`, `repo set-default`.
+- Repository commands: `repo list`, `repo view`, `repo clone`, `repo create`,
+  `repo fork`, `repo delete`, `repo sync`, `repo set-default`.
   - Clone respects `git_protocol` config key (`https` or `ssh`).
-- Issue tracker commands: `issue list`, `issue view`, `issue create`, `issue edit`, `issue close`, `issue reopen`, `issue comment`, `issue delete`.
+  - `repo set-default` writes `default_repo` into `bb.toml` at git root.
+- Issue tracker commands: `issue list`, `issue view`, `issue create`,
+  `issue edit`, `issue close`, `issue reopen`, `issue comment`, `issue delete`.
   - Clear error when issue tracker is disabled for a repo (API 404).
-- Pipeline commands: `pipeline list`, `pipeline run`, `pipeline view`, `pipeline steps`, `pipeline logs`, `pipeline stop`.
+- Pipeline commands: `pipeline list`, `pipeline run`, `pipeline view`,
+  `pipeline steps`, `pipeline logs`, `pipeline stop`.
+  - `pipeline logs --step TEXT` accepts step UUID; omit for all steps.
 - Branch commands: `branch list`, `branch create`, `branch delete`.
+  - `branch create --from TEXT` to specify source commit or branch.
 - Workspace commands: `workspace list`, `workspace view`, `workspace members`.
 - Project commands: `project list`, `project view`, `project create`.
-- Snippet commands: `snippet list`, `snippet view`, `snippet create`, `snippet edit`, `snippet delete`.
-- Raw API command: `bb api <endpoint>` with `--method`, `--field`, `--input`.
-- Config layering: CLI args > env > project `bb.toml` > user `config.toml` (platformdirs) > defaults.
-  - Keys: `git_protocol`, `editor`, `default_workspace`.
-  - `config get` and `config set` subcommands.
-- Shell completion: `completion bash`, `completion zsh`, `completion fish`, `completion powershell`.
-- Browse: `bb browse` opens current repo or a specific PR/issue/pipeline/branch in the system browser.
-- Plain table output (rich) and `--json` flag for structured output on all list/view commands.
-- Global `-R / --repo` flag to override git-remote context detection.
-- `BBError` hierarchy: `AuthError`, `ApiError`, `ContextError`, `ConfigError`; single catch in `cli.main()`.
+- Snippet commands: `snippet list`, `snippet view`, `snippet create`,
+  `snippet edit`, `snippet delete`.
+  - `snippet view` and `snippet delete` take `WORKSPACE SNIP_ID` positional args.
+  - `snippet view --raw --file TEXT` for raw file content.
+- Raw API command: `bb api [ENDPOINT]` with `-X / --method`, `-f / --field`,
+  `--paginate`, `--input TEXT`.
+  - `bb api request` subcommand alias.
+- `bb browse [--repo] [--branch] [--no-open]` — open current repo in browser.
+- `bb completion <SHELL>` — print shell completion script for bash, zsh, fish,
+  or powershell.
+- Config layering: CLI args > env vars > project `bb.toml` > user `config.toml`
+  (platformdirs) > defaults.
+  - Valid keys: `git_protocol`, `editor`, `default_repo`, `default_workspace`.
+  - `config get <KEY>` and `config set <KEY> <VALUE>` subcommands.
+- Plain table output (rich) and `--json` flag on all list/view commands.
+- Global `-R / --repo TEXT` flag to override git-remote context detection.
+- `BBError` hierarchy: `AuthError`, `ApiError`, `ContextError`, `ConfigError`;
+  single catch in `cli.main()`.
 - `scripts/setup.sh`: idempotent uv-based setup for macOS and Linux.
-- Five canonical docs under `docs/`: ARCHITECTURE, API, TESTING, RUNBOOK, CHANGELOG.
+- Five canonical docs under `docs/`: ARCHITECTURE, API, TESTING, RUNBOOK,
+  CHANGELOG.

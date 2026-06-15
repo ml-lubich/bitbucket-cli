@@ -12,7 +12,7 @@ import typer
 
 from bb.core.client import make_client
 from bb.core.context import resolve_repo
-from bb.core.out import print_json, print_table
+from bb.core.output import print_json, print_table
 
 app = typer.Typer(help="Manage projects", no_args_is_help=True)
 

@@ -6,6 +6,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-09
+
 ### Added
 
 - OS keyring storage for tokens (macOS Keychain / Linux Secret Service /
@@ -15,6 +17,17 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `bb auth token` prints the active token for scripting.
 - Pydantic `validate_limit` wired into list commands (`pr`, `repo`, `issue`,
   `branch`, `pipeline`).
+- Bitbucket Data Center / Server support (`base_url`, path translation,
+  `bb doctor`).
+
+### Fixed
+
+- `bb repo clone` / `repo sync` / `pr checkout` HTTPS git operations now inject
+  the stored credential via `git -c http.extraHeader=Authorization: …`, so
+  private repos no longer fail with "could not read Username".
+- Data Center `bb workspace list` / `workspace view` now populate `slug` from
+  the project `key` (DC has no workspace slug field). `/workspaces/{key}` maps
+  to `/projects/{key}`.
 
 ### Removed
 

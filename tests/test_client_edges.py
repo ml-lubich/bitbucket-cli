@@ -73,6 +73,19 @@ def test_normalize_datacenter_project_item() -> None:
     assert project["links"]["html"]["href"].endswith("/projects/PVA")
 
 
+def test_normalize_datacenter_project_sets_slug_from_key() -> None:
+    project = _normalize_datacenter_response(
+        "/workspaces",
+        {"values": [{"key": "PVA", "name": "Polaris", "public": False}]},
+        "https://bitbucket.polariswireless.com",
+    )
+    assert project["values"][0]["slug"] == "PVA"
+
+
+def test_map_datacenter_workspace_item_to_project() -> None:
+    assert _map_datacenter_path("/workspaces/PVA") == "/projects/PVA"
+
+
 def test_normalize_datacenter_branch_adds_target() -> None:
     data = _normalize_datacenter_response(
         "/repositories/PVA/radio/refs/branches",

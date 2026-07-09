@@ -390,3 +390,39 @@ def test_nested_hosts_toml_section(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     monkeypatch.delenv("BITBUCKET_AUTH_TOKEN", raising=False)
     monkeypatch.setattr(auth_mod, "_find_dotenv", lambda: None)
     assert auth_mod.resolve_credential().token == "nested-tok"
+
+
+def test_authorization_header_bearer() -> None:
+    from bb.core.auth import authorization_header
+
+    assert authorization_header(Credential(token="tok")) == "Bearer tok"
+
+
+def test_authorization_header_basic() -> None:
+    import base64
+
+    from bb.core.auth import authorization_header
+
+    header = authorization_header(Credential(token="tok", username="alice", auth_type="basic"))
+    expected = base64.b64encode(b"alice:tok").decode()
+    assert header == f"Basic {expected}"
+
+
+def test_git_command_injects_https_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    import bb.core.auth as auth_mod
+
+    monkeypatch.setenv("BB_TOKEN", "git-tok")
+    cmd = auth_mod.git_command(["clone", "https://example/repo.git"], https_auth=True)
+    assert cmd == [
+        "git",
+        "-c",
+        "http.extraHeader=Authorization: Bearer git-tok",
+        "clone",
+        "https://example/repo.git",
+    ]
+
+
+def test_git_command_skips_auth_when_disabled() -> None:
+    from bb.core.auth import git_command
+
+    assert git_command(["status"]) == ["git", "status"]

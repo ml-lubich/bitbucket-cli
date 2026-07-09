@@ -43,10 +43,37 @@ def _repo(full_name: str = "PVA/radio") -> dict:
 def test_repo_clone_runs_git(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client()
     calls: list[list[str]] = []
+    monkeypatch.setenv("BB_TOKEN", "clone-tok")
     monkeypatch.setattr("bb.commands.repo.make_client", lambda: client)
     monkeypatch.setattr("bb.commands.repo._run_subprocess", lambda cmd: calls.append(cmd))
     runner.invoke(app, ["repo", "clone", "PVA/radio", "radio-copy"])
-    assert calls == [["git", "clone", "https://clone/radio.git", "radio-copy"]]
+    assert calls == [
+        [
+            "git",
+            "-c",
+            "http.extraHeader=Authorization: Bearer clone-tok",
+            "clone",
+            "https://clone/radio.git",
+            "radio-copy",
+        ]
+    ]
+
+
+def test_repo_clone_ssh_skips_https_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.get.return_value = {
+        **_repo(),
+        "links": {
+            "html": {"href": "https://bitbucket/projects/PVA/repos/radio"},
+            "clone": [{"name": "ssh", "href": "git@bitbucket:PVA/radio.git"}],
+        },
+    }
+    calls: list[list[str]] = []
+    monkeypatch.setenv("BB_GIT_PROTOCOL", "ssh")
+    monkeypatch.setattr("bb.commands.repo.make_client", lambda: client)
+    monkeypatch.setattr("bb.commands.repo._run_subprocess", lambda cmd: calls.append(cmd))
+    runner.invoke(app, ["repo", "clone", "PVA/radio"])
+    assert calls == [["git", "clone", "git@bitbucket:PVA/radio.git"]]
 
 
 def test_repo_clone_url_missing_protocol_raises() -> None:
@@ -83,10 +110,18 @@ def test_repo_sync_fetches_parent(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     calls: list[list[str]] = []
     monkeypatch.setenv("BB_REPO", "PVA/radio")
+    monkeypatch.setenv("BB_TOKEN", "sync-tok")
     monkeypatch.setattr("bb.commands.repo.make_client", lambda: client)
     monkeypatch.setattr("bb.commands.repo._run_subprocess", lambda cmd: calls.append(cmd))
     runner.invoke(app, ["repo", "sync"])
-    assert calls[0] == ["git", "fetch", "https://clone/base.git", "main"]
+    assert calls[0] == [
+        "git",
+        "-c",
+        "http.extraHeader=Authorization: Bearer sync-tok",
+        "fetch",
+        "https://clone/base.git",
+        "main",
+    ]
 
 
 def test_repo_sync_without_parent_exits_nonzero(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -20,7 +20,8 @@ _MEMBER_COLS = ["NAME", "NICKNAME", "UUID"]
 
 
 def _fmt_ws_row(ws: dict[str, Any]) -> list[str]:
-    return [str(ws.get("slug", "")), str(ws.get("name", ""))]
+    # Prefer Cloud `slug`; fall back to DC project `key` if normalization missed it.
+    return [str(ws.get("slug") or ws.get("key") or ""), str(ws.get("name", ""))]
 
 
 def _fmt_member_row(m: dict[str, Any]) -> list[str]:
@@ -53,7 +54,7 @@ def ws_view(
     client = make_client()
     w = client.get(f"/workspaces/{slug}")
     link = ((w.get("links") or {}).get("html") or {}).get("href", "")
-    typer.echo(f"slug:       {w.get('slug', '')}")
+    typer.echo(f"slug:       {w.get('slug') or w.get('key') or ''}")
     typer.echo(f"name:       {w.get('name', '')}")
     typer.echo(f"uuid:       {w.get('uuid', '')}")
     typer.echo(f"created_on: {w.get('created_on', '')}")

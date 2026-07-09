@@ -257,6 +257,7 @@ _PR_BASE_RE = re.compile(r"^/repositories/([^/]+)/([^/]+)/pullrequests/?$")
 _PR_ITEM_RE = re.compile(r"^/repositories/([^/]+)/([^/]+)/pullrequests/([^/]+)(/.*)?$")
 _BRANCH_BASE_RE = re.compile(r"^/repositories/([^/]+)/([^/]+)/refs/branches/?$")
 _BRANCH_ITEM_RE = re.compile(r"^/repositories/([^/]+)/([^/]+)/refs/branches/([^/]+)/?$")
+_WORKSPACE_ITEM_RE = re.compile(r"^/workspaces/([^/]+)/?$")
 _PROJECTS_RE = re.compile(r"^/workspaces/([^/]+)/projects/?$")
 _PROJECT_ITEM_RE = re.compile(r"^/workspaces/([^/]+)/projects/([^/]+)/?$")
 
@@ -269,6 +270,9 @@ def _map_datacenter_path(path: str) -> str:
         return "/projects"
     if path == "/workspaces":
         return "/projects"
+    m = _WORKSPACE_ITEM_RE.match(path)
+    if m:
+        return f"/projects/{m.group(1)}"
     m = _PROJECTS_RE.match(path)
     if m:
         return "/projects"
@@ -356,7 +360,7 @@ def _normalize_datacenter_response(path: str, data: dict[str, Any], web_url: str
         return _normalize_values(data, _normalize_dc_branch)
     if _PROJECTS_RE.match(path) or path in {"/workspaces", "/user"}:
         return _normalize_values(data, lambda item: _normalize_dc_project(item, web_url))
-    if _PROJECT_ITEM_RE.match(path):
+    if _PROJECT_ITEM_RE.match(path) or _WORKSPACE_ITEM_RE.match(path):
         return _normalize_dc_project(data, web_url)
     return data
 
@@ -401,6 +405,9 @@ def _normalize_dc_repo(repo: dict[str, Any], web_url: str) -> dict[str, Any]:
 def _normalize_dc_project(project: dict[str, Any], web_url: str) -> dict[str, Any]:
     key = str(project.get("key", ""))
     result = dict(project)
+    # Cloud workspaces expose `slug`; DC projects expose `key`. Map key→slug so
+    # `bb workspace list/view` and Cloud-shaped callers can use one identifier.
+    result["slug"] = str(project.get("slug") or key)
     result["is_private"] = project.get("public") is False
     result["links"] = {
         **(project.get("links") or {}),

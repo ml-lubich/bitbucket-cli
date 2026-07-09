@@ -49,6 +49,17 @@ def test_workspace_list_emits_slug(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "acme" in result.output
 
 
+def test_workspace_list_emits_datacenter_project_key_as_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _make_mock_client(
+        paginate_returns=[{"key": "PVA", "name": "Polaris Voice Analytics"}]
+    )
+    monkeypatch.setattr("bb.commands.workspace.make_client", lambda: client)
+    result = runner.invoke(app, ["workspace", "list"])
+    assert "PVA" in result.output
+
+
 def test_workspace_list_json(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _make_mock_client(paginate_returns=[_ws_fixture("ws")])
     monkeypatch.setattr("bb.commands.workspace.make_client", lambda: client)
@@ -61,6 +72,25 @@ def test_workspace_view_shows_slug(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("bb.commands.workspace.make_client", lambda: client)
     result = runner.invoke(app, ["workspace", "view", "devteam"])
     assert "devteam" in result.output
+
+
+def test_workspace_view_shows_datacenter_key_as_slug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _make_mock_client(
+        get_returns={
+            "key": "PVA",
+            "name": "Polaris Voice Analytics",
+            "links": {
+                "html": {
+                    "href": "https://bitbucket.polariswireless.com/projects/PVA"
+                }
+            },
+        }
+    )
+    monkeypatch.setattr("bb.commands.workspace.make_client", lambda: client)
+    result = runner.invoke(app, ["workspace", "view", "PVA"])
+    assert "slug:       PVA" in result.output
 
 
 def test_workspace_view_shows_url(monkeypatch: pytest.MonkeyPatch) -> None:

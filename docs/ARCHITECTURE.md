@@ -10,7 +10,8 @@ src/bb/
 └── core/
 │   ├── config.py        — Settings dataclass; load_settings(); set_user_value()
 │   ├── auth.py          — Credential/Credentials; resolve/save/delete;
-│   │                      OS keyring + hosts.toml fallback
+│   │                      OS keyring + hosts.toml fallback;
+│   │                      git HTTPS Authorization helpers (extraHeader)
 │   ├── client.py        — ApiClient (httpx wrapper); make_client(); post_files();
 │   │                      raw_request(); BBClient alias
 │   ├── context.py       — RepoContext; current_repo(); current_branch();
@@ -77,8 +78,8 @@ Token resolution (auth.py, separate from config.py):
 1. `commands/*` may import any `core/*` module; never from other `commands/*`.
 2. `core/*` modules import only stdlib and declared third-party deps; never from `commands/`.
 3. `ApiClient` is the only HTTP path in the entire codebase. No command may call `httpx` directly.
-4. `make_client()` in `client.py` is the only site where credentials are resolved and injected into a request.
-5. No secret values (raw token strings) may appear in output, log messages, or error text. Use `masked()` from `output.py` for any display that references a credential.
+4. `make_client()` in `client.py` is the only site where credentials are resolved and injected into HTTP API requests. HTTPS git clone/fetch/checkout additionally resolve credentials via `auth.git_command(..., https_auth=True)` and pass them to git as a one-shot `http.extraHeader` (not persisted in git config).
+5. No secret values (raw token strings) may appear in output, log messages, or error text. Use `masked()` from `output.py` for any display that references a credential. (`bb auth token` and the git `extraHeader` argv are intentional exceptions for scripting / private HTTPS clone.)
 
 ## Data flow
 
@@ -113,6 +114,8 @@ CLI arg parse (typer)
 - **Cloud + Data Center**: Cloud uses `https://api.bitbucket.org/2.0`; Data
   Center/Server uses `<base_url>/rest/api/1.0`. Cloud-shaped repo paths are
   translated into Data Center project/repo REST paths by `core/client.py`.
+  Workspace list/view map to DC projects; project `key` is normalized to
+  `slug` so command tables and Cloud-shaped callers share one identifier.
 - **Pydantic at the boundary**: `core/validation.py` validates high-risk
   user-facing inputs such as `base_url`, auth type, HTTP method, repo parts,
   and limits before lower-level modules use them.

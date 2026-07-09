@@ -12,9 +12,12 @@ from collections.abc import Callable
 
 import typer
 
+from bb.core.auth import git_command
 from bb.core.client import ApiClient
 from bb.core.client import make_client as make_api_client
+from bb.core.config import load_settings
 from bb.core.context import RepoContext, current_branch, current_repo
+from bb.core.deployment import deployment_from_base_url
 from bb.core.errors import BBError
 from bb.core.output import print_json, print_table
 from bb.core.validation import validate_limit
@@ -170,7 +173,8 @@ def pr_checkout(
     pr = client.get(f"{_pr_base(ctx)}/{pr_id}")
     branch = pr["source"]["branch"]["name"]
     clone_url = _pr_clone_url(pr, ctx)
-    subprocess.run(["git", "fetch", clone_url, branch], check=True)
+    host = deployment_from_base_url(ctx.base_url or load_settings().base_url).host
+    subprocess.run(git_command(["fetch", clone_url, branch], https_auth=True, host=host), check=True)
     subprocess.run(["git", "checkout", branch], check=True)
 
 

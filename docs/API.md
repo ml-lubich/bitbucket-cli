@@ -236,6 +236,10 @@ Show repository details. Uses git-remote context if not specified.
 
 Clone a repository. Respects `git_protocol` config key (`https` or `ssh`).
 
+For HTTPS clones, `bb` injects the active credential via
+`git -c http.extraHeader=Authorization: …` (Bearer token, or Basic when a
+username is configured). SSH clones are unchanged.
+
 ### `bb repo create [OPTIONS]`
 
 | Flag | Required | Description |
@@ -431,9 +435,17 @@ Delete a branch.
 
 ## workspace
 
+On Bitbucket Data Center, workspaces map to projects. `bb workspace list`
+calls `/projects` and sets each item's `slug` from the project `key` so the
+SLUG column and `--json` output stay usable as identifiers (e.g. `AAB`).
+`bb workspace view <KEY>` maps to `/projects/{KEY}`. `bb workspace members`
+is Cloud-only (DC has no equivalent members endpoint).
+
 ### `bb workspace list [OPTIONS]`
 
 List all workspaces the authenticated user belongs to.
+
+On Data Center this lists projects; SLUG is the project key.
 
 | Flag | Description |
 |---|---|
@@ -443,9 +455,13 @@ List all workspaces the authenticated user belongs to.
 
 Show details for a workspace.
 
+On Data Center, `SLUG` is the project key.
+
 ### `bb workspace members <SLUG> [OPTIONS]`
 
 List members of a workspace.
+
+Cloud only.
 
 | Flag | Description |
 |---|---|

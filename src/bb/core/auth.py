@@ -8,6 +8,7 @@ Failure: AuthError when no credential found. Tokens never logged.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import stat
@@ -51,6 +52,28 @@ class Credentials:
 
 def masked(token: str) -> str:
     return token[:4] + "****"
+
+
+def authorization_header(cred: Credential) -> str:
+    """Build the HTTP Authorization header value for API and git HTTPS."""
+    if cred.username:
+        raw = base64.b64encode(f"{cred.username}:{cred.token}".encode()).decode()
+        return f"Basic {raw}"
+    return f"Bearer {cred.token}"
+
+
+def git_https_config_args(cred: Credential) -> list[str]:
+    """Return `git -c` args so HTTPS clone/fetch uses the stored credential."""
+    return ["-c", f"http.extraHeader=Authorization: {authorization_header(cred)}"]
+
+
+def git_command(args: list[str], *, https_auth: bool = False, host: str = HOST) -> list[str]:
+    """Build a git argv list, optionally injecting HTTPS auth from resolve_credential."""
+    cmd = ["git"]
+    if https_auth:
+        cmd.extend(git_https_config_args(resolve_credential(host=host)))
+    cmd.extend(args)
+    return cmd
 
 
 def resolve_credential(host: str = HOST) -> Credential:

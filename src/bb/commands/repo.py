@@ -12,9 +12,11 @@ from typing import Any, Optional
 import tomlkit
 import typer
 
+from bb.core.auth import git_command
 from bb.core.client import ApiClient, make_client
 from bb.core.config import load_settings
 from bb.core.context import RepoContext, current_repo, resolve_repo
+from bb.core.deployment import deployment_from_base_url
 from bb.core.errors import BBError
 from bb.core.output import print_json, print_table
 from bb.core.validation import validate_limit
@@ -75,6 +77,14 @@ def _run_subprocess(cmd: list[str]) -> None:
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise BBError(result.stderr.strip() or "subprocess failed")
+
+
+def _auth_host() -> str:
+    return deployment_from_base_url(load_settings().base_url).host
+
+
+def _git(args: list[str], *, https_auth: bool = False) -> None:
+    _run_subprocess(git_command(args, https_auth=https_auth, host=_auth_host()))
 
 
 def _git_toplevel() -> str:
@@ -146,10 +156,10 @@ def repo_clone(
     r = client.get(f"/repositories/{ctx.workspace}/{ctx.repo}")
     protocol = load_settings().git_protocol
     url = _clone_url(r, protocol)
-    cmd = ["git", "clone", url]
+    args = ["clone", url]
     if directory:
-        cmd.append(directory)
-    _run_subprocess(cmd)
+        args.append(directory)
+    _git(args, https_auth=protocol == "https")
 
 
 @app.command("create")
@@ -212,8 +222,8 @@ def repo_sync() -> None:
         raise BBError("not a fork — no parent repository")
     parent_url = _clone_url(parent, "https")
     mb = (r.get("mainbranch") or {}).get("name", "main")
-    _run_subprocess(["git", "fetch", parent_url, mb])
-    _run_subprocess(["git", "merge", "FETCH_HEAD"])
+    _git(["fetch", parent_url, mb], https_auth=True)
+    _git(["merge", "FETCH_HEAD"])
     typer.echo("synced with upstream")
 
 

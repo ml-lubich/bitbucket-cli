@@ -71,10 +71,18 @@ def test_pr_view_web_opens_url(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_pr_checkout_fetches_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _client()
     calls: list[list[str]] = []
+    monkeypatch.setenv("BB_TOKEN", "pr-tok")
     _patch(monkeypatch, client)
     monkeypatch.setattr("bb.commands.pr.subprocess.run", lambda cmd, check: calls.append(cmd))
     runner.invoke(app, ["pr", "checkout", "9"])
-    assert calls[0] == ["git", "fetch", "https://clone", "feature/radio"]
+    assert calls[0] == [
+        "git",
+        "-c",
+        "http.extraHeader=Authorization: Bearer pr-tok",
+        "fetch",
+        "https://clone",
+        "feature/radio",
+    ]
 
 
 def test_pr_close_declines(monkeypatch: pytest.MonkeyPatch) -> None:

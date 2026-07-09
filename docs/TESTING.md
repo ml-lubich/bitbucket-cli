@@ -74,6 +74,31 @@ Name tests by the behavior they protect, not the function they call.
 Good: `test_auth_status_exits_1_when_no_token`
 Bad: `test_load_credentials`
 
+## HTTPS git auth
+
+`bb repo clone`, `repo sync`, and `pr checkout` must inject the active
+credential into git HTTPS operations. Cover with:
+
+- Unit: `authorization_header` / `git_command` in `tests/test_auth.py`
+  (Bearer and Basic)
+- Command: `tests/test_repo_extended.py` asserts `git -c http.extraHeader=…`
+  on HTTPS clone/sync and no header on SSH clone
+- Command: `tests/test_pr_extended_cmd.py` asserts the same header on
+  `pr checkout` fetch
+
+## Data Center workspace / project slug
+
+DC projects expose `key`, not Cloud `slug`. Client normalization must set
+`slug` from `key` for `/workspaces` and `/workspaces/{key}` responses.
+Cover this with:
+
+- Unit: `_normalize_datacenter_response("/workspaces", ...)` asserts `slug`
+- Integration: `ApiClient.paginate("/workspaces")` against `MockTransport`
+  returning DC project payloads; assert path `/rest/api/1.0/projects` and
+  non-empty `slug` values
+- Command: `bb workspace list` with a key-only fixture still prints the key
+  in the SLUG column
+
 ## Not tested (intentional)
 
 - **Live Bitbucket API** — no integration tests against real endpoints;

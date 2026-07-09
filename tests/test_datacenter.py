@@ -77,3 +77,36 @@ def test_datacenter_pr_create_body_maps_refs() -> None:
     assert captured["fromRef"]["id"] == "refs/heads/feature"
     assert captured["toRef"]["repository"]["project"]["key"] == "PVA"
     assert pr["source"]["branch"]["name"] == "feature"
+
+
+def test_datacenter_workspace_list_maps_project_key_to_slug() -> None:
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.url.path)
+        body = {
+            "values": [
+                {"key": "PVA", "name": "Polaris Voice Analytics", "public": False},
+                {"key": "CROWD", "name": "Crowd", "public": True},
+            ]
+        }
+        return httpx.Response(200, content=json.dumps(body).encode())
+
+    items = list(_dc_client(handler).paginate("/workspaces"))
+    assert seen == ["/rest/api/1.0/projects"]
+    assert [item["slug"] for item in items] == ["PVA", "CROWD"]
+    assert [item["key"] for item in items] == ["PVA", "CROWD"]
+
+
+def test_datacenter_workspace_view_maps_to_project() -> None:
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.url.path)
+        body = {"key": "PVA", "name": "Polaris Voice Analytics", "public": False}
+        return httpx.Response(200, content=json.dumps(body).encode())
+
+    ws = _dc_client(handler).get("/workspaces/PVA")
+    assert seen == ["/rest/api/1.0/projects/PVA"]
+    assert ws["slug"] == "PVA"
+    assert ws["links"]["html"]["href"].endswith("/projects/PVA")

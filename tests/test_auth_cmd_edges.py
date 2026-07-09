@@ -131,11 +131,17 @@ def test_auth_token_prints_raw_token(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_auth_login_help_mentions_keyring() -> None:
-    result = runner.invoke(app, ["auth", "login", "--help"])
+    # Wide COLUMNS + NO_COLOR: Rich truncates option names in narrow CI terminals.
+    result = runner.invoke(
+        app,
+        ["auth", "login", "--help"],
+        env={"COLUMNS": "120", "NO_COLOR": "1", "TERM": "dumb"},
+    )
     assert result.exit_code == 0
-    assert "keyring" in result.output.lower()
-    assert "--with-token" in result.output
-    assert "--web" not in result.output
+    text = result.output.lower()
+    assert "keyring" in text
+    assert "with-token" in text
+    assert "--web" not in text
 
 
 def test_login_stores_in_keyring_when_available(

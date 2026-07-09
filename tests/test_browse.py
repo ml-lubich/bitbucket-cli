@@ -9,6 +9,11 @@ from bb.cli import app
 runner = CliRunner()
 
 
+@pytest.fixture(autouse=True)
+def cloud_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BB_BASE_URL", "https://bitbucket.org")
+
+
 def test_browse_no_open_prints_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BB_REPO", "myws/myrepo")
     result = runner.invoke(app, ["browse", "--no-open"])
@@ -24,6 +29,20 @@ def test_browse_no_open_with_branch(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_browse_no_open_with_repo_flag(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["browse", "--repo", "acme/api", "--no-open"])
     assert "bitbucket.org/acme/api" in result.output
+
+
+def test_browse_datacenter_repo_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BB_BASE_URL", raising=False)
+    result = runner.invoke(
+        app,
+        [
+            "browse",
+            "--repo",
+            "https://bitbucket.polariswireless.com/scm/PVA/radio.git",
+            "--no-open",
+        ],
+    )
+    assert "bitbucket.polariswireless.com/projects/PVA/repos/radio" in result.output
 
 
 def test_browse_url_contains_workspace(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -9,7 +9,6 @@ import pytest
 from bb.core.auth import Credential, Credentials
 from bb.core.errors import AuthError
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 def _patch_hosts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
@@ -349,3 +348,45 @@ def test_username_from_hosts_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     _patch_hosts(monkeypatch, tmp_path)
     import bb.core.auth as auth_mod
     assert auth_mod._username_from_hosts() == ""
+
+
+def test_email_env_upgrades_to_basic(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _patch_hosts(monkeypatch, tmp_path)
+    import bb.core.auth as auth_mod
+
+    monkeypatch.setenv("BB_TOKEN", "ATATT-tok")
+    monkeypatch.setenv("BITBUCKET_EMAIL", "me@example.com")
+    monkeypatch.setattr(auth_mod, "_find_dotenv", lambda: None)
+    cred = auth_mod.resolve_credential()
+    assert cred.auth_type == "basic"
+    assert cred.username == "me@example.com"
+
+
+def test_corrupt_hosts_toml_falls_back_empty(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    hosts = _patch_hosts(monkeypatch, tmp_path)
+    hosts.write_text("{not valid toml", encoding="utf-8")
+    import bb.core.auth as auth_mod
+
+    monkeypatch.delenv("BB_TOKEN", raising=False)
+    monkeypatch.delenv("BITBUCKET_TOKEN", raising=False)
+    monkeypatch.delenv("BITBUCKET_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr(auth_mod, "_find_dotenv", lambda: None)
+    with pytest.raises(AuthError):
+        auth_mod.resolve_credential()
+
+
+def test_nested_hosts_toml_section(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    hosts = _patch_hosts(monkeypatch, tmp_path)
+    hosts.write_text(
+        '[bitbucket.org]\ntoken = "nested-tok"\nauth_type = "bearer"\n',
+        encoding="utf-8",
+    )
+    import bb.core.auth as auth_mod
+
+    monkeypatch.delenv("BB_TOKEN", raising=False)
+    monkeypatch.delenv("BITBUCKET_TOKEN", raising=False)
+    monkeypatch.delenv("BITBUCKET_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr(auth_mod, "_find_dotenv", lambda: None)
+    assert auth_mod.resolve_credential().token == "nested-tok"

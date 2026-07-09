@@ -14,6 +14,7 @@ import typer
 
 import bb.core.client as _client_mod
 from bb.core.errors import BBError
+from bb.core.validation import validate_method
 
 
 def _parse_fields(pairs: list[str]) -> dict[str, str]:
@@ -45,15 +46,19 @@ def _build_body(method: str, fields: dict[str, str], input_file: Optional[Path])
 def api_cmd(
     endpoint: str = typer.Argument(..., help="API endpoint, e.g. /user"),
     method: str = typer.Option("GET", "--method", "-X", help="HTTP method"),
+    base_url: str = typer.Option("", "--base-url", help="Bitbucket base URL override."),
     field: Optional[list[str]] = typer.Option(None, "--field", "-f", help="key=value fields"),
     input_file: Optional[Path] = typer.Option(None, "--input", help="JSON body from file"),
 ) -> None:
     """Make a raw Bitbucket API request and pretty-print the response."""
     if input_file is not None and field:
         raise BBError("--input and --field are mutually exclusive")
-    verb = method.upper()
+    verb = validate_method(method)
     fields = _parse_fields(field or [])
     body = _build_body(verb, fields, input_file)
     params = fields if verb == "GET" and fields else None
-    text = _client_mod.raw_request(verb, endpoint, params, body=body)
+    if base_url:
+        text = _client_mod.raw_request(verb, endpoint, params, body=body, base_url=base_url)
+    else:
+        text = _client_mod.raw_request(verb, endpoint, params, body=body)
     typer.echo(_fmt_json_or_text(text))

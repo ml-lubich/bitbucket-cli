@@ -9,14 +9,15 @@ from __future__ import annotations
 import subprocess
 from typing import Any, Optional
 
-import typer
 import tomlkit
+import typer
 
-from bb.core.client import make_client
+from bb.core.client import ApiClient, make_client
 from bb.core.config import load_settings
-from bb.core.context import RepoContext, resolve_repo
+from bb.core.context import RepoContext, current_repo, resolve_repo
 from bb.core.errors import BBError
 from bb.core.output import print_json, print_table
+from bb.core.validation import validate_limit
 
 app = typer.Typer(help="Manage repositories", no_args_is_help=True)
 
@@ -32,11 +33,12 @@ def _resolve_ws(workspace: Optional[str]) -> str:
 
 def _resolve_ctx(repo_arg: Optional[str]) -> RepoContext:
     if repo_arg:
-        parts = repo_arg.split("/", 1)
-        if len(parts) != 2:
-            raise BBError(f"invalid repo format {repo_arg!r}; expected workspace/slug")
-        return RepoContext(workspace=parts[0], slug=parts[1])
+        return current_repo(override=repo_arg)
     return resolve_repo()
+
+
+def _make_client_for_ctx(ctx: RepoContext) -> ApiClient:
+    return make_client(base_url=ctx.base_url) if ctx.base_url else make_client()
 
 
 def _fmt_row(r: dict[str, Any]) -> list[str]:
@@ -63,7 +65,8 @@ def _fmt_view(r: dict[str, Any]) -> None:
 
 def _clone_url(r: dict[str, Any], protocol: str) -> str:
     for entry in (r.get("links") or {}).get("clone", []):
-        if entry.get("name") == protocol:
+        name = entry.get("name")
+        if name == protocol or (protocol == "https" and name == "http"):
             return str(entry["href"])
     raise BBError(f"no clone URL for protocol {protocol!r}")
 
@@ -103,6 +106,7 @@ def repo_list(
     as_json: bool = typer.Option(False, "--json"),
 ) -> None:
     """List repositories in a workspace."""
+    limit = validate_limit(limit)
     ws = _resolve_ws(workspace)
     client = make_client()
     params: dict[str, Any] = {"pagelen": limit}
@@ -122,7 +126,7 @@ def repo_view(
 ) -> None:
     """Show details for a repository."""
     ctx = _resolve_ctx(repo_arg)
-    client = make_client()
+    client = _make_client_for_ctx(ctx)
     r = client.get(f"/repositories/{ctx.workspace}/{ctx.repo}")
     link = ((r.get("links") or {}).get("html") or {}).get("href", "")
     if web:
@@ -178,7 +182,7 @@ def repo_fork(
     body: dict[str, Any] = {}
     if workspace:
         body["workspace"] = {"slug": workspace}
-    client = make_client()
+    client = _make_client_for_ctx(ctx)
     r = client.post(f"/repositories/{ctx.workspace}/{ctx.repo}/forks", json_body=body)
     typer.echo(f"forked to {r.get('full_name', '')}")
 
@@ -192,7 +196,7 @@ def repo_delete(
     ctx = _resolve_ctx(repo_arg)
     if not yes:
         typer.confirm(f"Delete {ctx.full_name}?", abort=True)
-    client = make_client()
+    client = _make_client_for_ctx(ctx)
     client.delete(f"/repositories/{ctx.workspace}/{ctx.repo}")
     typer.echo(f"deleted {ctx.full_name}")
 
@@ -201,7 +205,7 @@ def repo_delete(
 def repo_sync() -> None:
     """Sync fork with upstream parent (git fetch + merge)."""
     ctx = resolve_repo()
-    client = make_client()
+    client = _make_client_for_ctx(ctx)
     r = client.get(f"/repositories/{ctx.workspace}/{ctx.repo}")
     parent = r.get("parent")
     if not parent:

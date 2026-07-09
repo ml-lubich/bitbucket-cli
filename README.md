@@ -1,6 +1,7 @@
-# bb — Bitbucket Cloud CLI
+# bb — Bitbucket CLI
 
-A lightweight, gh-style command-line client for Bitbucket Cloud with token
+A lightweight, gh-style command-line client for Bitbucket Cloud and Bitbucket
+Data Center/Server with token
 authentication, plain-text table output, and a `--json` flag on every
 list/view command.
 
@@ -28,6 +29,12 @@ uv tool install .
 bb --help
 ```
 
+After the package is published to PyPI:
+
+```bash
+uv tool install bitbucket-cli
+```
+
 ### Fallback only — if `uv` is not available
 
 ```bash
@@ -38,6 +45,13 @@ pip install -e .
 
 ## Authentication
 
+By default, `bb` targets Bitbucket Cloud. For Bitbucket Data Center/Server, set
+the web base URL first:
+
+```bash
+bb config set base_url https://bitbucket.polariswireless.com
+```
+
 `bb` resolves credentials in this order (first match wins):
 
 | Priority | Source | Example |
@@ -46,17 +60,32 @@ pip install -e .
 | 2 | `BITBUCKET_TOKEN` env var | `export BITBUCKET_TOKEN="${YOUR_TOKEN}"` |
 | 3 | `BITBUCKET_AUTH_TOKEN` env var | `export BITBUCKET_AUTH_TOKEN="${YOUR_TOKEN}"` |
 | 4 | Repo-local `.env` file | `BB_TOKEN="${YOUR_TOKEN}"` line in `.env` |
-| 5 | `hosts.toml` (written by `bb auth login`, mode 0600) | — |
+| 5 | OS keyring (macOS Keychain / Linux Secret Service) | — |
+| 6 | `hosts.toml` fallback (mode 0600) | — |
 
-**Interactive login:**
+**Interactive login** (paste once; stored globally until logout):
 
 ```bash
-bb auth login                        # prompts securely for token
-bb auth login --token "${YOUR_TOKEN}"  # pass token directly (env var recommended)
+bb auth login                        # prompts securely; stores in OS keyring
+bb auth login --token "${YOUR_TOKEN}"
+echo "$TOKEN" | bb auth login --with-token --no-verify
 bb auth status                       # verify stored credential
 ```
 
-**App passwords (username + password):** Atlassian API tokens (the `ATATT...`
+**Bitbucket Data Center/Server HTTP access tokens:** Tokens created from an
+on-prem Bitbucket user access-token page, often with a `BBDC-...` prefix, use
+Bearer auth against `https://your-bitbucket-host/rest/api/1.0`:
+
+```bash
+bb config set base_url https://bitbucket.polariswireless.com
+bb auth login
+bb doctor
+```
+
+`bb` also accepts on-prem repo URLs wherever a repo override is accepted, e.g.
+`--repo https://bitbucket.polariswireless.com/scm/PVA/my-repo.git`.
+
+**Bitbucket Cloud app passwords / Atlassian API tokens:** Atlassian API tokens (the `ATATT...`
 format) require HTTP Basic auth with your Bitbucket account email as the
 username. Pass `--username` to `bb auth login` or set `BITBUCKET_EMAIL` /
 `BB_USERNAME` alongside the token env var.
@@ -99,7 +128,7 @@ UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline logs abc-uuid-1234
 
 | Group | Subcommands |
 |---|---|
-| `auth` | `login`, `logout`, `status` |
+| `auth` | `login`, `logout`, `status`, `token` |
 | `pr` | `list`, `view`, `create`, `checkout`, `merge`, `close`, `reopen`, `edit`, `review`, `comment`, `diff`, `checks` |
 | `repo` | `list`, `view`, `clone`, `create`, `fork`, `delete`, `sync`, `set-default` |
 | `issue` | `list`, `view`, `create`, `edit`, `close`, `reopen`, `comment`, `delete` |
@@ -111,12 +140,15 @@ UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline logs abc-uuid-1234
 | `config` | `get`, `set` |
 | `api` | (top-level command — raw authenticated API request) |
 | `browse` | (top-level command — open repo in browser) |
+| `doctor` | (top-level command — config/auth diagnostics) |
 | `completion` | (top-level command — print shell completion script) |
 
 Run `bb help`, `bb -h`, or `bb --help` for root help. Run
 `bb help <group>`, `bb <group> -h`, or `bb <group> --help` for group flags.
 Run `bb help <group> <subcommand>` or `bb <group> <subcommand> -h` for
 per-subcommand flags.
+
+Use `bb doctor --json` for agent-friendly setup/auth diagnostics.
 
 ---
 
@@ -125,8 +157,10 @@ per-subcommand flags.
 | `gh` command | `bb` equivalent |
 |---|---|
 | `gh auth login` | `bb auth login` |
+| `gh auth login --with-token` | `bb auth login --with-token` |
 | `gh auth status` | `bb auth status` |
 | `gh auth logout` | `bb auth logout` |
+| `gh auth token` | `bb auth token` |
 | `gh pr list` | `bb pr list` |
 | `gh pr create` | `bb pr create` |
 | `gh pr merge` | `bb pr merge <ID>` |
@@ -176,6 +210,7 @@ per-subcommand flags.
 
 | Key | Default | Description |
 |---|---|---|
+| `base_url` | `https://bitbucket.org` | Bitbucket web base URL; set to your Data Center host for on-prem |
 | `git_protocol` | `https` | Clone protocol: `https` or `ssh` |
 | `editor` | `""` | Editor for interactive prompts; falls back to `$EDITOR` |
 | `default_repo` | `""` | Default repo as `workspace/slug` |
@@ -185,7 +220,9 @@ Read or write user config:
 
 ```bash
 bb config get git_protocol
+bb config get base_url
 bb config set git_protocol ssh
+bb config set base_url https://bitbucket.polariswireless.com
 bb config set default_workspace myteam
 ```
 
@@ -209,6 +246,8 @@ color codes. Useful in CI or scripts that parse `bb` output.
 - [API reference](docs/API.md)
 - [Testing](docs/TESTING.md)
 - [Runbook](docs/RUNBOOK.md)
+- [Agent usage](docs/AGENTS.md)
+- [Publishing](docs/PUBLISHING.md)
 - [Changelog](docs/CHANGELOG.md)
 
 ---

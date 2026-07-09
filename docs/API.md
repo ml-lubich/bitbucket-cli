@@ -32,7 +32,7 @@ bb help repo list
 | File | Location (platform-resolved) | Format | Mode |
 |---|---|---|---|
 | User config | `platformdirs.user_config_dir("bb")/config.toml` | TOML | default |
-| Token store | `platformdirs.user_config_dir("bb")/hosts.toml` | TOML | 0600 |
+| Token store | OS keyring (`bb` service) preferred; `hosts.toml` fallback | keyring / TOML | 0600 (file) |
 | Project config | `<cwd>/bb.toml` | TOML | default |
 
 ## Config keys
@@ -41,6 +41,7 @@ Valid keys for `bb config get/set` and both TOML config files:
 
 | Key | Default | Description |
 |---|---|---|
+| `base_url` | `https://bitbucket.org` | Bitbucket web base URL; set to on-prem host for Data Center/Server |
 | `git_protocol` | `https` | Clone protocol: `https` or `ssh` |
 | `editor` | `""` | Editor override; falls back to `$EDITOR` |
 | `default_repo` | `""` | Default repo as `workspace/slug` |
@@ -53,6 +54,8 @@ Valid keys for `bb config get/set` and both TOML config files:
 | `BB_TOKEN` | — | Bitbucket API token or app password (token resolution, highest priority) |
 | `BITBUCKET_TOKEN` | — | Alternative token env name |
 | `BITBUCKET_AUTH_TOKEN` | — | Alternative token env name |
+| `BITBUCKET_EMAIL` / `BB_USERNAME` | — | Account email; upgrades env/.env tokens to basic auth |
+| `BB_BASE_URL` | `base_url` | Bitbucket web base URL, e.g. `https://bitbucket.polariswireless.com` |
 | `BB_REPO` | `default_repo` | Default repo `workspace/slug` |
 | `BB_WORKSPACE` | `default_workspace` | Default workspace slug |
 | `BB_EDITOR` | `editor` | Editor override |
@@ -73,23 +76,33 @@ Valid keys for `bb config get/set` and both TOML config files:
 
 ### `bb auth login [OPTIONS]`
 
-Store a Bitbucket access token. Prompts securely if `--token` is omitted.
+Authenticate with Bitbucket. Default: secure prompt for an access token.
+The token is stored once in the OS keyring (macOS Keychain / Linux Secret
+Service / Windows Credential Locker) and reused until logout. Falls back to
+`hosts.toml` (mode 0600) when no keyring backend is available.
 
 | Flag | Description |
 |---|---|
-| `--token TEXT` | Token value; prompted securely if omitted |
-| `--username TEXT` | Username for basic auth (optional) |
-| `--no-verify` | Skip GET /user verification after storing token |
+| `--token TEXT` | Token value; prompted securely if omitted and `--with-token` is not set |
+| `--with-token` | Read token from stdin (non-interactive) |
+| `--username TEXT` | Username/email for basic auth (ATATT tokens) |
+| `--base-url TEXT` | Bitbucket web base URL override; saved to user config on successful login |
+| `--auth-type TEXT` | `bearer` or `basic` (Pydantic-validated); Data Center HTTP access tokens use `bearer` |
+| `--no-verify` | Skip API verification after storing token |
 
-Writes `hosts.toml` with mode 0600 in the platformdirs user config dir.
+`--token` and `--with-token` are mutually exclusive.
 
 ### `bb auth logout`
 
-Remove stored credentials from `hosts.toml`.
+Remove stored credentials from the OS keyring and `hosts.toml`.
 
 ### `bb auth status`
 
 Show current credential source and verify against the Bitbucket API. Exits 1 if not authenticated.
+
+### `bb auth token`
+
+Print the active access token to stdout (for scripting). Exits 1 if not authenticated.
 
 ---
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import json
 
-import pytest
 import httpx
+import pytest
 
 from bb.core.auth import Credential
 from bb.core.client import ApiClient

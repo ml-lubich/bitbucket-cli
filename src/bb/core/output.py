@@ -7,18 +7,18 @@ Failure modes: respects NO_COLOR env via rich defaults.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-
 _console = Console()
 _err_console = Console(stderr=True)
 
 
-def print_table(columns: list[str], rows: list[tuple[str, ...]]) -> None:
+def print_table(columns: Sequence[str], rows: Sequence[Sequence[str]]) -> None:
     table = Table(*columns, show_header=True, header_style="bold")
     for row in rows:
         table.add_row(*row)

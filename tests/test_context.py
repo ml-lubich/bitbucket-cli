@@ -40,6 +40,21 @@ def test_https_url_non_bitbucket_returns_none() -> None:
     assert _parse_https_url("https://github.com/myws/myrepo") is None
 
 
+def test_datacenter_scm_https_url_parsed() -> None:
+    ctx = _parse_https_url("https://bitbucket.polariswireless.com/scm/PVA/radio.git")
+    assert ctx == RepoContext("PVA", "radio", "https://bitbucket.polariswireless.com")
+
+
+def test_datacenter_project_web_url_parsed() -> None:
+    ctx = _parse_https_url("https://bitbucket.polariswireless.com/projects/PVA/repos/radio/browse")
+    assert ctx == RepoContext("PVA", "radio", "https://bitbucket.polariswireless.com")
+
+
+def test_override_accepts_datacenter_url() -> None:
+    ctx = current_repo("https://bitbucket.polariswireless.com/scm/PVA/radio.git")
+    assert ctx.full_name == "PVA/radio"
+
+
 @pytest.mark.parametrize("url,expected_ws", [
     ("git@bitbucket.org:myws/myrepo.git", "myws"),
     ("git@bitbucket.org:myws/myrepo", "myws"),

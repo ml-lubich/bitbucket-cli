@@ -1,0 +1,72 @@
+# Publishing
+
+## PyPI
+
+Build and verify locally:
+
+```bash
+./scripts/quality.sh
+uv build
+```
+
+Publish with a PyPI trusted publisher or token:
+
+```bash
+uv publish
+```
+
+After publish, install from PyPI:
+
+```bash
+uv tool install bitbucket-cli
+bb --version
+```
+
+## Homebrew
+
+Recommended shape:
+
+1. Publish a GitHub release with an sdist tarball.
+2. Compute the tarball SHA256.
+3. Update a tap formula with the new version and SHA.
+
+Example formula:
+
+```ruby
+class BitbucketCli < Formula
+  include Language::Python::Virtualenv
+
+  desc "Minimal gh-style CLI for Bitbucket Cloud and Data Center"
+  homepage "https://github.com/ml-lubich/bitbucket-cli"
+  url "https://files.pythonhosted.org/packages/source/b/bitbucket-cli/bitbucket_cli-0.2.0.tar.gz"
+  sha256 "REPLACE_WITH_SDIST_SHA256"
+  license "MIT"
+
+  depends_on "python@3.12"
+
+  def install
+    virtualenv_install_with_resources
+  end
+
+  test do
+    assert_match "bb version", shell_output("#{bin}/bb --version")
+  end
+end
+```
+
+Install from a tap after the formula is pushed:
+
+```bash
+brew tap ml-lubich/tap
+brew install bitbucket-cli
+```
+
+## Release Checklist
+
+1. Update `src/bb/__init__.py` and `pyproject.toml` to the same version.
+2. Update `docs/CHANGELOG.md`.
+3. Run `./scripts/quality.sh`.
+4. Build with `uv build`.
+5. Publish to PyPI with `uv publish`.
+6. Create a GitHub release.
+7. Update the Homebrew tap formula.

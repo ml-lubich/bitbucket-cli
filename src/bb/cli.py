@@ -21,6 +21,7 @@ from bb.commands import (
     branch,
     browse,
     config_cmd,
+    doctor,
     issue,
     pipeline,
     pr,
@@ -167,7 +168,8 @@ def _apply_help_options(typer_app: typer.Typer) -> None:
         command.context_settings = _merge_help_context(command.context_settings)
     for group in typer_app.registered_groups:
         group.context_settings = _merge_help_context(group.context_settings)
-        _apply_help_options(group.typer_instance)
+        if group.typer_instance is not None:
+            _apply_help_options(group.typer_instance)
 
 
 def _register_groups() -> None:
@@ -175,6 +177,7 @@ def _register_groups() -> None:
         app.add_typer(sub, name=name)
     app.command("browse")(browse.browse)
     app.command("api")(api.api_cmd)
+    app.command("doctor")(doctor.doctor)
     _apply_help_options(app)
 
 

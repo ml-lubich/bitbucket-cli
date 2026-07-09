@@ -1,7 +1,7 @@
 """
 config.py — Non-secret settings with documented precedence.
 
-Inputs : env BB_GIT_PROTOCOL / BB_EDITOR / BB_WORKSPACE, cwd/bb.toml,
+Inputs : env BB_BASE_URL / BB_GIT_PROTOCOL / BB_EDITOR / BB_WORKSPACE, cwd/bb.toml,
          <user_config_dir("bb")>/config.toml.
 Outputs: Settings dataclass; set_user_value writes the user config.toml.
 Failure: ConfigError on unknown keys. Secrets live in auth.py, never here.
@@ -15,10 +15,13 @@ from pathlib import Path
 import tomlkit
 from platformdirs import user_config_dir
 
+from bb.core.deployment import CLOUD_WEB_URL
 from bb.core.errors import ConfigError
+from bb.core.validation import validate_base_url
 
-_VALID_KEYS = {"git_protocol", "editor", "default_repo", "default_workspace"}
+_VALID_KEYS = {"base_url", "git_protocol", "editor", "default_repo", "default_workspace"}
 _ENV_MAP = {
+    "BB_BASE_URL": "base_url",
     "BB_GIT_PROTOCOL": "git_protocol",
     "BB_EDITOR": "editor",
     "BB_REPO": "default_repo",
@@ -28,6 +31,7 @@ _ENV_MAP = {
 
 @dataclass(frozen=True)
 class Settings:
+    base_url: str = CLOUD_WEB_URL
     git_protocol: str = "https"
     editor: str = ""
     default_repo: str = ""
@@ -64,6 +68,7 @@ def load_settings() -> Settings:
     merged.update(_load_toml(_proj_cfg_path()))
     merged = _apply_env(merged)
     return Settings(
+        base_url=validate_base_url(merged.get("base_url", CLOUD_WEB_URL)),
         git_protocol=merged.get("git_protocol", "https"),
         editor=merged.get("editor", ""),
         default_repo=merged.get("default_repo", ""),
@@ -75,7 +80,7 @@ def get_value(key: str) -> str:
     if key not in _VALID_KEYS:
         raise ConfigError(f"unknown key {key!r}; valid: {sorted(_VALID_KEYS)}")
     data = _load_toml(_user_cfg_path())
-    defaults = {"git_protocol": "https"}
+    defaults = {"base_url": CLOUD_WEB_URL, "git_protocol": "https"}
     return data.get(key, defaults.get(key, ""))
 
 
@@ -85,7 +90,9 @@ def set_user_value(key: str, value: str) -> None:
     path = _user_cfg_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     doc = tomlkit.parse(path.read_text(encoding="utf-8")) if path.exists() else tomlkit.document()
-    doc[key] = value  # type: ignore[index]
+    if key == "base_url":
+        value = validate_base_url(value)
+    doc[key] = value
     path.write_text(tomlkit.dumps(doc), encoding="utf-8")
 
 

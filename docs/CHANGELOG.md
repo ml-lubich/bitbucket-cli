@@ -6,6 +6,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- OS keyring storage for tokens (macOS Keychain / Linux Secret Service /
+  Windows Credential Locker) via `keyring`; `hosts.toml` mode 0600 remains
+  the fallback when no keyring backend is available.
+- `bb auth login --with-token` reads a token from stdin.
+- `bb auth token` prints the active token for scripting.
+- Pydantic `validate_limit` wired into list commands (`pr`, `repo`, `issue`,
+  `branch`, `pipeline`).
+
+### Removed
+
+- Browser / `--web` OAuth login flow (token paste + keyring is the supported path).
+
 ## [0.1.2] - 2026-06-14
 
 ### Changed

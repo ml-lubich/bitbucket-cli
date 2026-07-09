@@ -13,10 +13,25 @@ class AuthError(BBError):
 
 
 class ApiError(BBError):
-    def __init__(self, status_code: int, message: str) -> None:
+    def __init__(
+        self,
+        status_code: int,
+        message: str,
+        method: str = "",
+        path: str = "",
+        hint: str = "",
+    ) -> None:
         self.status_code = status_code
         self.status = status_code  # compat alias
-        super().__init__(f"API {status_code}: {message}")
+        self.method = method
+        self.path = path
+        self.hint = hint
+        details = f"API {status_code}: {message}"
+        if method and path:
+            details = f"{details} ({method} {path})"
+        if hint:
+            details = f"{details}. Hint: {hint}"
+        super().__init__(details)
 
 
 class ContextError(BBError):

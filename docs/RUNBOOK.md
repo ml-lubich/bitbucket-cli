@@ -29,10 +29,20 @@ bb pr list
 bb pipeline logs abc123
 ```
 
+For Polaris Bitbucket Data Center:
+
+```bash
+bb config set base_url https://bitbucket.polariswireless.com
+bb auth login
+bb doctor
+```
+
 ## Creating a Bitbucket token
 
+### Bitbucket Cloud
+
 1. Log in to Bitbucket Cloud.
-2. Go to **Personal settings → API tokens** (or **App passwords** for older
+2. Go to **Personal settings -> API tokens** (or **App passwords** for older
    accounts that do not yet support API tokens).
 3. Create a token or app password with the scopes you need:
    - `repository` — repo read / clone / write
@@ -46,14 +56,32 @@ bb pipeline logs abc123
 5. Store it:
 
 ```bash
-bb auth login                        # prompts securely
+bb auth login                        # prompts securely; stores in OS keyring
 # or:
 export BB_TOKEN=${BB_TOKEN}
 bb auth login --token ${BB_TOKEN}
+# or pipe:
+echo "${BB_TOKEN}" | bb auth login --with-token
 ```
 
 Never commit the token value. Use `${BB_TOKEN}` placeholders in scripts
-and CI secret stores.
+and CI secret stores. The token is stored once in the OS keyring (or
+`hosts.toml` mode 0600 if no keyring is available) and reused until
+`bb auth logout`.
+
+### Bitbucket Data Center / Server
+
+1. Log in to the on-prem host, e.g. `https://bitbucket.polariswireless.com`.
+2. Go to **Account settings -> HTTP access tokens**.
+3. Create a token with repository and pull-request permissions.
+4. Copy the token immediately.
+5. Store it:
+
+```bash
+bb config set base_url https://bitbucket.polariswireless.com
+bb auth login
+bb doctor --json
+```
 
 ## Common failures
 
@@ -61,6 +89,7 @@ and CI secret stores.
 |---|---|---|
 | `bb: not authenticated — run 'bb auth login' or set BB_TOKEN` | No credentials configured | `bb auth login` or set `BB_TOKEN` env var |
 | `bb: API 401: ...` | Token expired or revoked | Rotate token; `bb auth logout && bb auth login` |
+| `bb: API 401: ... wrong auth type` | Data Center token stored as Basic or Cloud token used on-prem | Re-login with a fresh Data Center HTTP access token |
 | `bb: API 404: ...` on `bb issue list` | Issue tracker disabled for repo | Enable it in Bitbucket repo settings → Issue tracker |
 | `bb: not inside a git repo with an origin remote` | Not in a Bitbucket-hosted git repo | Pass `-R workspace/slug` or `export BB_REPO=workspace/slug` |
 | `bb: API 404: ...` on `bb repo ...` | Repo slug or workspace wrong | Verify with `bb repo list --workspace myworkspace` |
@@ -96,9 +125,11 @@ User config file location:
 - Linux: `~/.config/bb/config.toml`
 - macOS: `~/Library/Application Support/bb/config.toml`
 
-Token store location (mode 0600):
-- Linux: `~/.config/bb/hosts.toml`
-- macOS: `~/Library/Application Support/bb/hosts.toml`
+Token store:
+- Preferred: OS keyring service `bb` (macOS Keychain, Linux Secret Service, Windows Credential Locker)
+- Fallback file (mode 0600):
+  - Linux: `~/.config/bb/hosts.toml`
+  - macOS: `~/Library/Application Support/bb/hosts.toml`
 
 ## How to add a new command group
 

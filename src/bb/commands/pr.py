@@ -8,22 +8,23 @@ from __future__ import annotations
 
 import subprocess
 import webbrowser
+from collections.abc import Callable
 
 import typer
 
-from bb.core.auth import resolve_credential
 from bb.core.client import ApiClient
+from bb.core.client import make_client as make_api_client
 from bb.core.context import RepoContext, current_branch, current_repo
 from bb.core.errors import BBError
 from bb.core.output import print_json, print_table
+from bb.core.validation import validate_limit
 
 app = typer.Typer(help="Manage pull requests")
 
 
 def make_client(repo: str = "") -> tuple[ApiClient, RepoContext]:
-    cred = resolve_credential()
     ctx = current_repo(override=repo)
-    return ApiClient(cred), ctx
+    return make_api_client(base_url=ctx.base_url), ctx
 
 
 def _pr_base(ctx: RepoContext) -> str:
@@ -39,6 +40,7 @@ def pr_list(
     as_json: bool = typer.Option(False, "--json"),
 ) -> None:
     """List pull requests."""
+    limit = validate_limit(limit)
     client, ctx = make_client(repo)
     params = _build_list_params(client, ctx, state, limit, reviewer)
     items = list(client.paginate(_pr_base(ctx), **params))
@@ -178,6 +180,8 @@ def _pr_clone_url(pr: dict, ctx: RepoContext) -> str:
     for link in links:
         if link.get("name") == "https":
             return str(link["href"])
+    if ctx.base_url:
+        return f"{ctx.base_url}/scm/{ctx.workspace}/{ctx.repo}.git"
     return f"https://bitbucket.org/{ctx.workspace}/{ctx.repo}.git"
 
 
@@ -277,7 +281,7 @@ def _dispatch_review(
     unapprove: bool,
 ) -> None:
     base = f"{_pr_base(ctx)}/{pr_id}"
-    actions = {
+    actions: dict[str, Callable[[], object]] = {
         "approve": lambda: client.post(f"{base}/approve"),
         "request_changes": lambda: client.post(f"{base}/request-changes"),
         "unapprove": lambda: client.delete(f"{base}/approve"),

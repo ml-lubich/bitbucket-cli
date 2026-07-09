@@ -14,7 +14,7 @@ def test_version_exits_zero() -> None:
 
 def test_version_output_contains_version() -> None:
     result = runner.invoke(app, ["--version"])
-    assert "0.1" in result.output
+    assert "0.2.0" in result.output
 
 
 def test_help_exits_zero() -> None:

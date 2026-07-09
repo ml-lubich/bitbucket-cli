@@ -12,16 +12,31 @@ import re
 import subprocess
 from dataclasses import dataclass
 
+from bb.core.deployment import base_url_from_remote
 from bb.core.errors import ContextError
+from bb.core.validation import validate_repo_parts
 
 _SSH_RE = re.compile(r"git@bitbucket\.org[:/]([^/]+)/([^/]+?)(?:\.git)?$")
 _HTTPS_RE = re.compile(r"https?://(?:[^@]+@)?bitbucket\.org/([^/]+)/([^/]+?)(?:\.git)?/?$")
+_DC_HTTPS_SCM_RE = re.compile(
+    r"https?://(?:[^@]+@)?[^/]+(?:/[^/]+)*/scm/([^/]+)/([^/]+?)(?:\.git)?/?$",
+    re.IGNORECASE,
+)
+_DC_HTTPS_WEB_RE = re.compile(
+    r"https?://(?:[^@]+@)?[^/]+(?:/[^/]+)*/projects/([^/]+)/repos/([^/]+?)(?:/.*)?$",
+    re.IGNORECASE,
+)
+_DC_SSH_RE = re.compile(
+    r"(?:ssh://)?git@(?P<host>[^/:]+)(?::\d+)?[:/](?P<project>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
 class RepoContext:
     workspace: str
     slug: str
+    base_url: str = ""
 
     @property
     def full_name(self) -> str:
@@ -62,10 +77,13 @@ def resolve_repo() -> RepoContext:
 
 
 def _parse_override(value: str) -> RepoContext:
+    if _looks_like_url(value):
+        return _parse_remote_url(value)
     parts = value.split("/", 1)
     if len(parts) != 2 or not parts[0] or not parts[1]:
-        raise ContextError(f"invalid repo {value!r}; expected workspace/slug")
-    return RepoContext(workspace=parts[0], slug=parts[1])
+        raise ContextError(f"invalid repo {value!r}; expected workspace/slug or Bitbucket URL")
+    workspace, slug = validate_repo_parts(parts[0], parts[1])
+    return RepoContext(workspace=workspace, slug=slug)
 
 
 def _parse_ssh_url(url: str) -> RepoContext | None:
@@ -77,19 +95,52 @@ def _parse_ssh_url(url: str) -> RepoContext | None:
 
 def _parse_https_url(url: str) -> RepoContext | None:
     m = _HTTPS_RE.match(url)
+    if m:
+        return RepoContext(workspace=m.group(1), slug=m.group(2))
+    for pattern in (_DC_HTTPS_SCM_RE, _DC_HTTPS_WEB_RE):
+        m = pattern.match(url)
+        if m:
+            return RepoContext(
+                workspace=m.group(1),
+                slug=m.group(2),
+                base_url=base_url_from_remote(url),
+            )
+    return None
+
+
+def _parse_dc_ssh_url(url: str) -> RepoContext | None:
+    m = _DC_SSH_RE.match(url)
     if not m:
         return None
-    return RepoContext(workspace=m.group(1), slug=m.group(2))
+    host = m.group("host").lower()
+    if host == "github.com":
+        return None
+    if host == "bitbucket.org":
+        return RepoContext(workspace=m.group("project"), slug=m.group("repo"))
+    if "bitbucket" not in host:
+        return None
+    return RepoContext(
+        workspace=m.group("project"),
+        slug=m.group("repo"),
+        base_url=base_url_from_remote(url),
+    )
 
 
 def _parse_remote_url(url: str) -> RepoContext:
-    for parser in (_parse_ssh_url, _parse_https_url):
+    for parser in (_parse_ssh_url, _parse_https_url, _parse_dc_ssh_url):
         result = parser(url)
         if result:
             return result
     raise ContextError(
         f"remote URL {url!r} is not a Bitbucket URL — "
         "pass BB_REPO=workspace/repo or use --repo"
+    )
+
+
+def _looks_like_url(value: str) -> bool:
+    return (
+        value.startswith(("http://", "https://", "ssh://"))
+        or value.startswith("git@")
     )
 
 

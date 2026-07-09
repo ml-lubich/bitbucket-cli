@@ -13,9 +13,10 @@ from typing import Annotated, Optional
 
 import typer
 
-from bb.core.client import make_client, raw_request
-from bb.core.context import RepoContext, current_repo, current_branch
+from bb.core.client import ApiClient, make_client, raw_request
+from bb.core.context import RepoContext, current_branch, current_repo
 from bb.core.output import print_json, print_table
+from bb.core.validation import validate_limit
 
 app = typer.Typer(help="Manage pipelines")
 
@@ -24,6 +25,10 @@ _REPO_OPT = Annotated[str, typer.Option("--repo", "-R", help="workspace/slug")]
 
 def _pipelines_base(repo: RepoContext) -> str:
     return f"/repositories/{repo.workspace}/{repo.slug}/pipelines/"
+
+
+def _make_client_for_ctx(ctx: RepoContext) -> ApiClient:
+    return make_client(base_url=ctx.base_url) if ctx.base_url else make_client()
 
 
 def _pipeline_path(repo: RepoContext, uuid: str) -> str:
@@ -66,7 +71,10 @@ def _emit_step_log(repo: RepoContext, pipe_uuid: str, step_uuid: str, name: str)
         f"/repositories/{repo.workspace}/{repo.slug}"
         f"/pipelines/{pipe_uuid}/steps/{step_uuid}/log"
     )
-    typer.echo(raw_request("GET", path))
+    if repo.base_url:
+        typer.echo(raw_request("GET", path, base_url=repo.base_url))
+    else:
+        typer.echo(raw_request("GET", path))
 
 
 @app.command("list")
@@ -76,8 +84,9 @@ def pipeline_list(
     as_json: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """List recent pipelines."""
-    client = make_client()
+    limit = validate_limit(limit)
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     items = list(
         client.paginate(_pipelines_base(ctx), sort="-created_on", pagelen=str(limit))
     )[:limit]
@@ -94,8 +103,8 @@ def pipeline_run(
 ) -> None:
     """Trigger a pipeline run."""
     ref_name = branch or current_branch()
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     payload = {"target": {"ref_type": "branch", "type": "pipeline_ref_target", "ref_name": ref_name}}
     result = client.post(_pipelines_base(ctx), json_body=payload)
     typer.echo(f"{result.get('build_number', '')} {result.get('uuid', '')}")
@@ -108,8 +117,8 @@ def pipeline_view(
     as_json: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """View pipeline details."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     norm = _norm_uuid(uuid)
     p = client.get(_pipeline_path(ctx, norm))
     if as_json:
@@ -132,8 +141,8 @@ def pipeline_steps(
     as_json: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """List pipeline steps."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     norm = _norm_uuid(uuid)
     items = list(client.paginate(f"{_pipeline_path(ctx, norm)}/steps/"))
     if as_json:
@@ -149,8 +158,8 @@ def pipeline_logs(
     step: Optional[str] = typer.Option(None, "--step", help="Step UUID (omit for all steps)"),
 ) -> None:
     """Print pipeline step logs."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     norm = _norm_uuid(uuid)
     if step:
         _emit_step_log(ctx, norm, step, step)
@@ -166,7 +175,7 @@ def pipeline_stop(
     repo: _REPO_OPT = "",
 ) -> None:
     """Stop a running pipeline."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     norm = _norm_uuid(uuid)
     client.post(f"{_pipeline_path(ctx, norm)}/stopPipeline")

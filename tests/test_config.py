@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-
-
 import bb.core.config as cfg_mod
 from bb.core.config import Settings, load_settings
 
@@ -63,3 +61,20 @@ def test_missing_user_cfg_uses_defaults(monkeypatch, tmp_path):
     monkeypatch.setattr(cfg_mod, "_proj_cfg_path", lambda: tmp_path / "bb.toml")
     s = load_settings()
     assert isinstance(s, Settings)
+
+
+def test_env_base_url_normalized(monkeypatch, tmp_path):
+    monkeypatch.setenv(
+        "BB_BASE_URL",
+        "https://bitbucket.polariswireless.com/plugins/servlet/access-tokens/users/mlubich/manage",
+    )
+    monkeypatch.setattr(cfg_mod, "_user_cfg_path", lambda: tmp_path / "config.toml")
+    monkeypatch.setattr(cfg_mod, "_proj_cfg_path", lambda: tmp_path / "bb.toml")
+    assert load_settings().base_url == "https://bitbucket.polariswireless.com"
+
+
+def test_set_base_url_normalizes(monkeypatch, tmp_path):
+    user_cfg = tmp_path / "config.toml"
+    monkeypatch.setattr(cfg_mod, "_user_cfg_path", lambda: user_cfg)
+    cfg_mod.set_value("base_url", "bitbucket.polariswireless.com")
+    assert cfg_mod.get_value("base_url") == "https://bitbucket.polariswireless.com"

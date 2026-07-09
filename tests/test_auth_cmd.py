@@ -20,7 +20,7 @@ runner = CliRunner()
 def test_login_success_saves_hosts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import bb.core.auth as auth_mod
     monkeypatch.setattr(auth_mod, "_hosts_path", lambda: tmp_path / "hosts.toml")
-    result = runner.invoke(app, ["auth", "login", "--token", "mytoken123", "--no-verify"])
+    runner.invoke(app, ["auth", "login", "--token", "mytoken123", "--no-verify"])
     assert (tmp_path / "hosts.toml").exists()
 
 
@@ -34,9 +34,9 @@ def test_login_success_prints_display_name(tmp_path: Path, monkeypatch: pytest.M
 
 
 def test_login_rejected_token_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from bb.core.errors import ApiError
     import bb.commands.auth as auth_cmd
     import bb.core.auth as auth_mod
+    from bb.core.errors import ApiError
     monkeypatch.setattr(auth_mod, "_hosts_path", lambda: tmp_path / "hosts.toml")
 
     def _reject(cred: object) -> str:
@@ -50,9 +50,9 @@ def test_login_rejected_token_exits_nonzero(tmp_path: Path, monkeypatch: pytest.
 def test_login_rejected_token_does_not_save_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from bb.core.errors import ApiError
     import bb.commands.auth as auth_cmd
     import bb.core.auth as auth_mod
+    from bb.core.errors import ApiError
     hosts = tmp_path / "hosts.toml"
     monkeypatch.setattr(auth_mod, "_hosts_path", lambda: hosts)
 

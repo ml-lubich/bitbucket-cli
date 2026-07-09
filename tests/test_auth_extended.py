@@ -1,7 +1,6 @@
 """Extended tests for bb.core.auth — covers resolve_credential, save/delete, _cred_from_file."""
 from __future__ import annotations
 
-import stat
 from pathlib import Path
 
 import pytest
@@ -32,7 +31,7 @@ def test_resolve_credential_from_file(monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.delenv("BITBUCKET_TOKEN", raising=False)
     monkeypatch.delenv("BITBUCKET_AUTH_TOKEN", raising=False)
     monkeypatch.setattr(auth_mod, "_find_dotenv", lambda: None)
-    hosts = _patch_hosts(monkeypatch, tmp_path)
+    _patch_hosts(monkeypatch, tmp_path)
     auth_mod.save_credential(Credential(token="file-tok"))
     cred = auth_mod.resolve_credential()
     assert cred.token == "file-tok"

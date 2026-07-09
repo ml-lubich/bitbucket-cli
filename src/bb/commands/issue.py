@@ -11,10 +11,11 @@ from typing import Annotated, Optional
 
 import typer
 
-from bb.core.client import make_client
+from bb.core.client import ApiClient, make_client
 from bb.core.context import RepoContext, current_repo
 from bb.core.errors import BBError
 from bb.core.output import print_json, print_table
+from bb.core.validation import validate_limit
 
 app = typer.Typer(help="Manage issues")
 
@@ -25,6 +26,10 @@ _REPO_OPT = Annotated[str, typer.Option("--repo", "-R", help="workspace/slug")]
 
 def _issues_path(repo: RepoContext) -> str:
     return f"/repositories/{repo.workspace}/{repo.slug}/issues"
+
+
+def _make_client_for_ctx(ctx: RepoContext) -> ApiClient:
+    return make_client(base_url=ctx.base_url) if ctx.base_url else make_client()
 
 
 def _fmt_row(issue: dict) -> list[str]:
@@ -67,8 +72,9 @@ def issue_list(
     as_json: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """List issues."""
-    client = make_client()
+    limit = validate_limit(limit)
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     items = list(
         client.paginate(_issues_path(ctx), q=f'state="{state}"', pagelen=str(limit))
     )[:limit]
@@ -85,8 +91,8 @@ def issue_view(
     as_json: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     """View an issue."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     issue = client.get(f"{_issues_path(ctx)}/{issue_id}")
     if as_json:
         print_json(issue)
@@ -105,8 +111,8 @@ def issue_create(
     """Create an issue."""
     _chk_kind(kind)
     _chk_priority(priority)
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     payload: dict = {"title": title, "content": {"raw": body}, "kind": kind, "priority": priority}
     result = client.post(_issues_path(ctx), json_body=payload)
     typer.echo(str(result.get("id", "")))
@@ -135,8 +141,8 @@ def issue_edit(
         payload["priority"] = priority
     if not payload:
         raise BBError("provide at least one of --title, --body, --kind, --priority")
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     client.put(f"{_issues_path(ctx)}/{issue_id}", json_body=payload)
 
 
@@ -146,8 +152,8 @@ def issue_close(
     repo: _REPO_OPT = "",
 ) -> None:
     """Close an issue (sets state to resolved)."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     client.put(f"{_issues_path(ctx)}/{issue_id}", json_body={"state": "resolved"})
 
 
@@ -157,8 +163,8 @@ def issue_reopen(
     repo: _REPO_OPT = "",
 ) -> None:
     """Reopen an issue (sets state to open)."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     client.put(f"{_issues_path(ctx)}/{issue_id}", json_body={"state": "open"})
 
 
@@ -169,8 +175,8 @@ def issue_comment(
     body: str = typer.Option(..., "--body", help="Comment body"),
 ) -> None:
     """Add a comment to an issue."""
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     client.post(f"{_issues_path(ctx)}/{issue_id}/comments", json_body={"content": {"raw": body}})
 
 
@@ -183,6 +189,6 @@ def issue_delete(
     """Delete an issue."""
     if not yes:
         typer.confirm(f"Delete issue #{issue_id}?", abort=True)
-    client = make_client()
     ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
     client.delete(f"{_issues_path(ctx)}/{issue_id}")

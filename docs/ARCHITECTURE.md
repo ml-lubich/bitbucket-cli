@@ -9,17 +9,19 @@ src/bb/
 │                          commands; single main() catch for BBError
 └── core/
 │   ├── config.py        — Settings dataclass; load_settings(); set_user_value()
-│   ├── auth.py          — Credential/Credentials dataclasses; resolve_credential();
-│   │                      save_credential(); delete_credential()
+│   ├── auth.py          — Credential/Credentials; resolve/save/delete;
+│   │                      OS keyring + hosts.toml fallback
 │   ├── client.py        — ApiClient (httpx wrapper); make_client(); post_files();
 │   │                      raw_request(); BBClient alias
 │   ├── context.py       — RepoContext; current_repo(); current_branch();
 │   │                      git-remote → workspace/slug detection
+│   ├── deployment.py    — Cloud/Data Center base URL and API URL resolution
+│   ├── validation.py    — Pydantic gates for user-facing input
 │   ├── output.py        — emit_table(); emit_json(); masked()
 │   └── errors.py        — BBError hierarchy (AuthError, ApiError, ContextError,
 │                          ConfigError)
 └── commands/
-    ├── auth.py           — login / logout / status
+    ├── auth.py           — login / logout / status / token
     ├── pr.py             — list / view / create / checkout / merge / close /
     │                       reopen / edit / review / comment / diff / checks
     ├── repo.py           — list / view / clone / create / fork / delete /
@@ -54,7 +56,7 @@ No circular imports are permitted.
 Priority order (1 = highest):
 
 1. **CLI arguments** — `--repo`, `--workspace`, etc. passed on the command line
-2. **Environment variables** — `BB_TOKEN`, `BB_REPO`, `BB_WORKSPACE`, `BB_EDITOR`,
+2. **Environment variables** — `BB_TOKEN`, `BB_BASE_URL`, `BB_REPO`, `BB_WORKSPACE`, `BB_EDITOR`,
    `BB_GIT_PROTOCOL`
 3. **Project config** — `bb.toml` at the current working directory (repo root)
 4. **User config** — `config.toml` in `platformdirs.user_config_dir("bb")`
@@ -67,7 +69,8 @@ Token resolution (auth.py, separate from config.py):
 2. `BITBUCKET_TOKEN` env var
 3. `BITBUCKET_AUTH_TOKEN` env var
 4. Repo-local `.env` file (same three keys parsed as `KEY=VALUE` lines)
-5. `hosts.toml` in `platformdirs.user_config_dir("bb")` (written by `bb auth login`, mode 0600)
+5. OS keyring (`keyring` lib: macOS Keychain / XDG Secret Service / Windows Credential Locker)
+6. `hosts.toml` in `platformdirs.user_config_dir("bb")` (mode 0600 fallback when keyring unavailable)
 
 ## Layering invariants
 
@@ -81,9 +84,10 @@ Token resolution (auth.py, separate from config.py):
 
 ```
 CLI arg parse (typer)
-    → context resolve (context.py: BB_REPO env / --repo flag / git remote → workspace/slug)
+    → context resolve (context.py: BB_REPO env / --repo flag / git remote → workspace/slug or project/slug)
     → config merge (config.py: user cfg + project bb.toml + env vars)
-    → credential resolve (auth.py: env > .env > hosts.toml)
+    → deployment resolve (deployment.py: Cloud vs Data Center)
+    → credential resolve (auth.py: env > .env > keyring > hosts.toml)
     → ApiClient.request() (client.py: httpx, Bearer or BasicAuth header, pagination)
     → emit (output.py: rich table or JSON to stdout)
 ```
@@ -102,8 +106,16 @@ CLI arg parse (typer)
 
 - **Dict-dispatch group registration** (`_GROUPS` in `cli.py`) keeps `cli.py` decoupled from command implementations; adding a group is one dict entry and one import.
 - **Injected transport seam** (`ApiClient` and `raw_request()` accept an optional `httpx.BaseTransport`): tests pass a `MockTransport` rather than patching module globals.
-- **No OAuth browser flow in v0.1**: token paste only; interactive auth left for a later version.
-- **Bitbucket Cloud API 2.0 only**: no Server or Data Center support.
+- **Global secret storage**: `bb auth login` pastes a token once and stores it
+  in the OS keyring (preferred). `hosts.toml` (mode 0600) is the fallback when
+  no keyring backend is available (headless CI). Env / `.env` still override
+  for non-interactive agents.
+- **Cloud + Data Center**: Cloud uses `https://api.bitbucket.org/2.0`; Data
+  Center/Server uses `<base_url>/rest/api/1.0`. Cloud-shaped repo paths are
+  translated into Data Center project/repo REST paths by `core/client.py`.
+- **Pydantic at the boundary**: `core/validation.py` validates high-risk
+  user-facing inputs such as `base_url`, auth type, HTTP method, repo parts,
+  and limits before lower-level modules use them.
 - **`pr reopen` unsupported**: Bitbucket Cloud API has no reopen endpoint; the command surfaces a clear documented error rather than silently failing.
 - **`help` and `completion` live in `cli.py`**: they are root `@app.command()`
   functions, not separate command modules, because they require no API calls.

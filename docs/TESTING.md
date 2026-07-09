@@ -6,14 +6,21 @@
 UV_PROJECT_ENVIRONMENT=venv uv run pytest
 ```
 
+Full quality gate:
+
+```bash
+./scripts/quality.sh
+```
+
 With coverage:
 
 ```bash
 UV_PROJECT_ENVIRONMENT=venv uv run pytest --cov=bb --cov-report=term-missing
 ```
 
-Coverage target: ≥ 80% statements, lines, functions, and branches for
-`src/bb/core/` and `src/bb/commands/`.
+Coverage target: ≥ 85% total line/branch coverage for `bb`, enforced in
+`pyproject.toml`. The long-term target is 100%; raise the ratchet when coverage
+improves.
 
 ## Definition of Done
 
@@ -30,8 +37,8 @@ A feature is not done until:
    temp directory (`tmp_path` pytest fixture). Assert the written TOML content
    and file permissions (e.g. `hosts.toml` mode 0o600). Do not mock the
    filesystem.
-4. **Coverage gate** — `UV_PROJECT_ENVIRONMENT=venv uv run pytest --cov=bb`
-   must report ≥ 80% for the covered scope. Any intentionally excluded surface
+4. **Coverage gate** — `./scripts/quality.sh`
+   must pass the configured coverage threshold. Any intentionally excluded surface
    is listed under "Not tested" below.
 5. **One assert per test** — use `pytest.mark.parametrize` for multiple
    states; do not stack asserts.
@@ -74,6 +81,12 @@ Bad: `test_load_credentials`
   requests.
 - **Browser opening** — `webbrowser.open` is monkeypatched in `browse` tests;
   the actual OS browser call is not asserted to fire.
+- **Live OS keyring** — tests use an in-memory keyring stub (autouse fixture
+  disables the real backend); `tests/test_keyring.py` covers set/get/delete.
+- **Auth TDD matrix** — `tests/test_auth_matrix.py` generates ≥5000 parametrized
+  cases (precedence, keyring/file round-trip, host isolation, CLI login/logout,
+  masking). Run with:
+  `UV_PROJECT_ENVIRONMENT=venv uv run pytest tests/test_auth_matrix.py -q`
 - **Shell completion sourcing** — completion output is string-tested;
   sourcing into a live shell is not automated.
 - **Windows paths** — `platformdirs` behavior on Windows is not tested;

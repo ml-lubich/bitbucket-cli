@@ -8,18 +8,18 @@ from __future__ import annotations
 
 import typer
 
-from bb.core.auth import resolve_credential
 from bb.core.client import ApiClient
+from bb.core.client import make_client as make_api_client
 from bb.core.context import RepoContext, current_repo
 from bb.core.output import print_json, print_table
+from bb.core.validation import validate_limit
 
 app = typer.Typer(help="Manage branches")
 
 
 def make_client(repo: str = "") -> tuple[ApiClient, RepoContext]:
-    cred = resolve_credential()
     ctx = current_repo(override=repo)
-    return ApiClient(cred), ctx
+    return make_api_client(base_url=ctx.base_url), ctx
 
 
 def _refs_base(ctx: RepoContext) -> str:
@@ -33,6 +33,7 @@ def branch_list(
     as_json: bool = typer.Option(False, "--json"),
 ) -> None:
     """List branches."""
+    limit = validate_limit(limit)
     client, ctx = make_client(repo)
     items = list(client.paginate(_refs_base(ctx), pagelen=limit))
     if as_json:

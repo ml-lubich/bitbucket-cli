@@ -18,9 +18,12 @@ uv publish
 After publish, install from PyPI:
 
 ```bash
-uv tool install bitbucket-cli
+uv tool install bitbucket-bb
 bb --version
 ```
+
+The PyPI distribution name is `bitbucket-bb` (console script remains `bb`).
+The GitHub repository stays `ml-lubich/bitbucket-cli`.
 
 ## Homebrew
 
@@ -38,7 +41,7 @@ class BitbucketCli < Formula
 
   desc "Minimal gh-style CLI for Bitbucket Cloud and Data Center"
   homepage "https://github.com/ml-lubich/bitbucket-cli"
-  url "https://files.pythonhosted.org/packages/source/b/bitbucket-cli/bitbucket_cli-0.2.0.tar.gz"
+  url "https://files.pythonhosted.org/packages/source/b/bitbucket-bb/bitbucket_bb-0.2.0.tar.gz"
   sha256 "REPLACE_WITH_SDIST_SHA256"
   license "MIT"
 
@@ -58,7 +61,7 @@ Install from a tap after the formula is pushed:
 
 ```bash
 brew tap ml-lubich/tap
-brew install bitbucket-cli
+brew install bitbucket-bb
 ```
 
 ## Release Checklist

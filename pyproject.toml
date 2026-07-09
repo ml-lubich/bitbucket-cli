@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "bitbucket-cli"
+name = "bitbucket-bb"
 version = "0.2.0"
 description = "Lightweight gh-style CLI for Bitbucket Cloud and Data Center"
 requires-python = ">=3.12"
@@ -23,8 +23,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://mishalubich.com"
-Repository = "https://github.com/ml-lubich"
+Homepage = "https://github.com/ml-lubich/bitbucket-cli"
+Repository = "https://github.com/ml-lubich/bitbucket-cli"
+Issues = "https://github.com/ml-lubich/bitbucket-cli/issues"
 
 [project.scripts]
 bb = "bb.cli:main"

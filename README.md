@@ -32,8 +32,12 @@ bb --help
 After the package is published to PyPI:
 
 ```bash
-uv tool install bitbucket-cli
+uv tool install bitbucket-bb
+bb --help
 ```
+
+> PyPI package name is `bitbucket-bb` (the name `bitbucket-cli` is taken by an
+> unrelated legacy package). The installed command is still `bb`.
 
 ### Fallback only — if `uv` is not available
 

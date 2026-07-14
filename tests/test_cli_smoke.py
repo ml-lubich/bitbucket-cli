@@ -77,3 +77,28 @@ def test_config_help_exits_zero() -> None:
     from bb.cli import app
     result = runner.invoke(app, ["config", "--help"])
     assert result.exit_code == 0
+
+
+def test_issue_help_exits_zero() -> None:
+    from bb.cli import app
+    result = runner.invoke(app, ["issue", "--help"])
+    assert result.exit_code == 0
+
+
+def test_search_help_exits_zero() -> None:
+    from bb.cli import app
+    result = runner.invoke(app, ["search", "--help"])
+    assert result.exit_code == 0
+
+
+def test_status_help_exits_zero() -> None:
+    from bb.cli import app
+    result = runner.invoke(app, ["status", "--help"])
+    assert result.exit_code == 0
+
+
+def test_top_level_help_lists_search_and_status() -> None:
+    from bb.cli import app
+    result = runner.invoke(app, ["--help"])
+    assert "search" in result.output
+    assert "status" in result.output

@@ -6,6 +6,7 @@ from typing import Callable
 
 import httpx
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from bb.cli import app
@@ -174,3 +175,117 @@ def test_pipeline_logs_all_steps(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("bb.commands.pipeline.raw_request", mock_raw)
     runner.invoke(app, ["pipeline", "logs", "abc-123"])
     assert len(log_calls) == 2
+
+
+def test_pipeline_variable_list_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch(monkeypatch, [httpx.Response(200, json={"values": []})])
+    result = runner.invoke(app, ["pipeline", "variable", "list"])
+    assert result.exit_code == 0
+
+
+def test_pipeline_variable_list_hits_trailing_slash_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured.append(req)
+        return httpx.Response(200, json={"values": []})
+
+    client = ApiClient(_CRED, transport=_make_transport(handler))
+    monkeypatch.setattr("bb.commands.pipeline.make_client", lambda: client)
+    monkeypatch.setattr("bb.commands.pipeline.current_repo", lambda *_a, **_kw: _REPO)
+    runner.invoke(app, ["pipeline", "variable", "list"])
+    assert captured[0].url.path.endswith("/pipelines_config/variables/")
+
+
+def test_pipeline_variable_list_shows_plain_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    var = {"uuid": "{v1}", "key": "FOO", "value": "bar", "secured": False}
+    _patch(monkeypatch, [httpx.Response(200, json={"values": [var]})])
+    result = runner.invoke(app, ["pipeline", "variable", "list"])
+    assert "FOO" in result.output
+    assert "bar" in result.output
+
+
+def test_pipeline_variable_list_masks_secured_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    var = {"uuid": "{v1}", "key": "SECRET", "value": "topsecret", "secured": True}
+    _patch(monkeypatch, [httpx.Response(200, json={"values": [var]})])
+    result = runner.invoke(app, ["pipeline", "variable", "list"])
+    assert "SECRET" in result.output
+    assert "topsecret" not in result.output
+    assert "********" in result.output
+
+
+def test_pipeline_variable_list_json_masks_secured_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    var = {"uuid": "{v1}", "key": "SECRET", "value": "topsecret", "secured": True}
+    _patch(monkeypatch, [httpx.Response(200, json={"values": [var]})])
+    result = runner.invoke(app, ["pipeline", "variable", "list", "--json"])
+    assert "topsecret" not in result.output
+
+
+def test_pipeline_variable_create_posts_key_value_secured(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured.append(req)
+        return httpx.Response(201, json={"uuid": "{new}", "key": "FOO", "value": "bar", "secured": False})
+
+    client = ApiClient(_CRED, transport=_make_transport(handler))
+    monkeypatch.setattr("bb.commands.pipeline.make_client", lambda: client)
+    monkeypatch.setattr("bb.commands.pipeline.current_repo", lambda *_a, **_kw: _REPO)
+    result = runner.invoke(
+        app, ["pipeline", "variable", "create", "--key", "FOO", "--value", "bar"]
+    )
+    assert result.exit_code == 0
+    body = json.loads(captured[0].content)
+    assert body == {"key": "FOO", "value": "bar", "secured": False}
+    assert captured[0].url.path.endswith("/pipelines_config/variables/")
+    assert "bar" in result.output
+
+
+def test_pipeline_variable_create_secured_never_echoes_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured.append(req)
+        return httpx.Response(
+            201, json={"uuid": "{new}", "key": "SECRET", "value": "topsecret", "secured": True}
+        )
+
+    client = ApiClient(_CRED, transport=_make_transport(handler))
+    monkeypatch.setattr("bb.commands.pipeline.make_client", lambda: client)
+    monkeypatch.setattr("bb.commands.pipeline.current_repo", lambda *_a, **_kw: _REPO)
+    result = runner.invoke(
+        app,
+        [
+            "pipeline", "variable", "create",
+            "--key", "SECRET", "--value", "topsecret", "--secured",
+        ],
+    )
+    assert result.exit_code == 0
+    body = json.loads(captured[0].content)
+    assert body == {"key": "SECRET", "value": "topsecret", "secured": True}
+    assert "topsecret" not in result.output
+    assert "********" in result.output
+
+
+def test_pipeline_variable_delete_requires_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch(monkeypatch, [])
+    monkeypatch.setattr("bb.commands.pipeline.typer.confirm", lambda *_a, **_kw: (_ for _ in ()).throw(typer.Abort()))
+    result = runner.invoke(app, ["pipeline", "variable", "delete", "v1"])
+    assert result.exit_code != 0
+
+
+def test_pipeline_variable_delete_with_yes_hits_delete_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured.append(req)
+        return httpx.Response(204)
+
+    client = ApiClient(_CRED, transport=_make_transport(handler))
+    monkeypatch.setattr("bb.commands.pipeline.make_client", lambda: client)
+    monkeypatch.setattr("bb.commands.pipeline.current_repo", lambda *_a, **_kw: _REPO)
+    result = runner.invoke(app, ["pipeline", "variable", "delete", "v1", "--yes"])
+    assert result.exit_code == 0
+    assert captured[0].method == "DELETE"
+    assert captured[0].url.path.endswith("/pipelines_config/variables/{v1}")
+    assert "deleted" in result.output

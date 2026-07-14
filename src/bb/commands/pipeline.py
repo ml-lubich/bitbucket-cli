@@ -19,12 +19,36 @@ from bb.core.output import print_json, print_table
 from bb.core.validation import validate_limit
 
 app = typer.Typer(help="Manage pipelines")
+variable_app = typer.Typer(help="Manage pipeline variables")
+app.add_typer(variable_app, name="variable")
 
 _REPO_OPT = Annotated[str, typer.Option("--repo", "-R", help="workspace/slug")]
 
 
 def _pipelines_base(repo: RepoContext) -> str:
     return f"/repositories/{repo.workspace}/{repo.slug}/pipelines/"
+
+
+def _variables_base(repo: RepoContext) -> str:
+    return f"/repositories/{repo.workspace}/{repo.slug}/pipelines_config/variables/"
+
+
+def _variable_path(repo: RepoContext, uuid: str) -> str:
+    return f"{_variables_base(repo)}{uuid}"
+
+
+def _fmt_variable_row(v: dict) -> list[str]:
+    secured = bool(v.get("secured"))
+    value = "********" if secured else str(v.get("value", ""))
+    return [str(v.get("uuid", "")), str(v.get("key", "")), value, str(secured)]
+
+
+def _mask_variable(v: dict) -> dict:
+    if not v.get("secured"):
+        return v
+    masked = dict(v)
+    masked["value"] = "********"
+    return masked
 
 
 def _make_client_for_ctx(ctx: RepoContext) -> ApiClient:
@@ -179,3 +203,50 @@ def pipeline_stop(
     client = _make_client_for_ctx(ctx)
     norm = _norm_uuid(uuid)
     client.post(f"{_pipeline_path(ctx, norm)}/stopPipeline")
+
+
+@variable_app.command("list")
+def variable_list(
+    repo: _REPO_OPT = "",
+    as_json: bool = typer.Option(False, "--json", help="Output JSON"),
+) -> None:
+    """List pipeline variables."""
+    ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
+    items = list(client.paginate(_variables_base(ctx)))
+    if as_json:
+        print_json([_mask_variable(v) for v in items])
+        return
+    print_table(["UUID", "KEY", "VALUE", "SECURED"], [_fmt_variable_row(v) for v in items])
+
+
+@variable_app.command("create")
+def variable_create(
+    key: str = typer.Option(..., "--key", help="Variable name"),
+    value: str = typer.Option(..., "--value", help="Variable value"),
+    secured: bool = typer.Option(False, "--secured", help="Mark variable as secured"),
+    repo: _REPO_OPT = "",
+) -> None:
+    """Create a pipeline variable."""
+    ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
+    payload = {"key": key, "value": value, "secured": secured}
+    result = client.post(_variables_base(ctx), json_body=payload)
+    shown_value = "********" if secured else result.get("value", value)
+    typer.echo(f"created {result.get('key', key)} ({result.get('uuid', '')}) = {shown_value}")
+
+
+@variable_app.command("delete")
+def variable_delete(
+    uuid: str = typer.Argument(..., help="Variable UUID"),
+    repo: _REPO_OPT = "",
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+) -> None:
+    """Delete a pipeline variable."""
+    ctx = current_repo(repo)
+    norm = _norm_uuid(uuid)
+    if not yes:
+        typer.confirm(f"Delete variable {norm}?", abort=True)
+    client = _make_client_for_ctx(ctx)
+    client.delete(_variable_path(ctx, norm))
+    typer.echo(f"deleted {norm}")

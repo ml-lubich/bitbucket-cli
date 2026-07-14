@@ -27,8 +27,12 @@ from bb.commands import (
     pr,
     project,
     repo,
+    search,
     snippet,
     workspace,
+)
+from bb.commands import (
+    status as status_cmd,
 )
 from bb.core.errors import BBError
 
@@ -43,6 +47,7 @@ _GROUPS: dict[str, typer.Typer] = {
     "project": project.app,
     "snippet": snippet.app,
     "config": config_cmd.app,
+    "search": search.app,
 }
 _HELP_OPTIONS: dict[str, object] = {"help_option_names": ["-h", "--help"]}
 _HELP_COMMAND_CONTEXT: dict[str, object] = _HELP_OPTIONS | {
@@ -178,6 +183,7 @@ def _register_groups() -> None:
     app.command("browse")(browse.browse)
     app.command("api")(api.api_cmd)
     app.command("doctor")(doctor.doctor)
+    app.command("status")(status_cmd.status)
     _apply_help_options(app)
 
 

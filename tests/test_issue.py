@@ -168,3 +168,50 @@ def test_issue_invalid_priority_rejected(monkeypatch: pytest.MonkeyPatch) -> Non
     _patch(monkeypatch, [])
     result = runner.invoke(app, ["issue", "create", "--title", "X", "--priority", "extreme"])
     assert result.exit_code != 0
+
+
+def test_issue_status_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch(
+        monkeypatch,
+        [
+            httpx.Response(200, json={"uuid": "{u1}"}),
+            httpx.Response(200, json={"values": []}),
+            httpx.Response(200, json={"values": []}),
+        ],
+    )
+    result = runner.invoke(app, ["issue", "status"])
+    assert result.exit_code == 0
+
+
+def test_issue_status_shows_reported_and_assigned(monkeypatch: pytest.MonkeyPatch) -> None:
+    reported = {"id": 1, "title": "Reported issue", "kind": "bug", "priority": "major", "state": "open"}
+    assigned = {"id": 2, "title": "Assigned issue", "kind": "bug", "priority": "minor", "state": "open"}
+    _patch(
+        monkeypatch,
+        [
+            httpx.Response(200, json={"uuid": "{u1}"}),
+            httpx.Response(200, json={"values": [reported]}),
+            httpx.Response(200, json={"values": [assigned]}),
+        ],
+    )
+    result = runner.invoke(app, ["issue", "status"])
+    assert "Reported issue" in result.output
+    assert "Assigned issue" in result.output
+
+
+def test_issue_status_queries_reporter_and_assignee_uuid(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        captured.append(req)
+        if str(req.url.path).endswith("/user"):
+            return httpx.Response(200, json={"uuid": "{u1}"})
+        return httpx.Response(200, json={"values": []})
+
+    client = ApiClient(_CRED, transport=_make_transport(handler))
+    monkeypatch.setattr("bb.commands.issue.make_client", lambda: client)
+    monkeypatch.setattr("bb.commands.issue.current_repo", lambda *_a, **_kw: _REPO)
+    runner.invoke(app, ["issue", "status"])
+    assert str(captured[0].url.path).endswith("/user")
+    assert captured[1].url.params["q"] == 'reporter.uuid="{u1}"'
+    assert captured[2].url.params["q"] == 'assignee.uuid="{u1}"'

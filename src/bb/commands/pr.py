@@ -132,6 +132,7 @@ def pr_view(
     repo: str = typer.Option("", "--repo", "-R"),
     as_json: bool = typer.Option(False, "--json"),
     web: bool = typer.Option(False, "--web"),
+    comments: bool = typer.Option(False, "--comments"),
 ) -> None:
     """View a pull request."""
     client, ctx = make_client(repo)
@@ -144,6 +145,8 @@ def pr_view(
         print_json(pr)
         return
     _print_pr_detail(pr)
+    if comments:
+        _print_pr_comments(client, ctx, pr_id)
 
 
 def _print_pr_detail(pr: dict) -> None:
@@ -161,6 +164,16 @@ def _print_pr_detail(pr: dict) -> None:
     typer.echo(f"Created: {created}")
     if desc:
         typer.echo(f"\n{desc}")
+
+
+def _print_pr_comments(client: ApiClient, ctx: RepoContext, pr_id: int) -> None:
+    comments = list(client.paginate(f"{_pr_base(ctx)}/{pr_id}/comments"))
+    typer.echo(f"\nComments ({len(comments)}):")
+    for c in comments:
+        author = c.get("user", {}).get("display_name", "")
+        created = c.get("created_on", "")
+        body = (c.get("content") or {}).get("raw", "")
+        typer.echo(f"\n{author} ({created}):\n{body}")
 
 
 @app.command("checkout")
@@ -342,6 +355,21 @@ def _status_row(s: dict) -> tuple[str, ...]:
     desc = str(s.get("description", ""))
     url = str(s.get("url", ""))
     return name, state, desc, url
+
+
+@app.command("status")
+def pr_status(
+    repo: str = typer.Option("", "--repo", "-R"),
+) -> None:
+    """Show pull requests created by and requesting review from the current user."""
+    client, ctx = make_client(repo)
+    uuid = client.get("/user").get("uuid", "")
+    created = list(client.paginate(_pr_base(ctx), q=f'author.uuid="{uuid}"', state="OPEN"))
+    reviewing = list(client.paginate(_pr_base(ctx), q=f'reviewers.uuid="{uuid}"', state="OPEN"))
+    typer.echo("Created by you:")
+    print_table(["ID", "TITLE", "BRANCH", "AUTHOR", "STATE"], [_pr_row(p) for p in created])
+    typer.echo("\nRequesting your review:")
+    print_table(["ID", "TITLE", "BRANCH", "AUTHOR", "STATE"], [_pr_row(p) for p in reviewing])
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

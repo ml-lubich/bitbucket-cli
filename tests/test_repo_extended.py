@@ -158,3 +158,82 @@ def test_git_toplevel_falls_back_to_cwd(tmp_path: Path, monkeypatch: pytest.Monk
         lambda *args, **kwargs: CompletedProcess(args[0], 1, stdout="", stderr=""),
     )
     assert _git_toplevel() == str(tmp_path)
+
+
+def test_repo_edit_requires_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    monkeypatch.setattr("bb.commands.repo._make_client_for_ctx", lambda ctx: client)
+    result = runner.invoke(app, ["repo", "edit", "PVA/radio"])
+    assert result.exit_code != 0
+    assert isinstance(result.exception, BBError)
+    client.put.assert_not_called()
+
+
+def test_repo_edit_description_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.put.return_value = _repo()
+    monkeypatch.setattr("bb.commands.repo._make_client_for_ctx", lambda ctx: client)
+    result = runner.invoke(app, ["repo", "edit", "PVA/radio", "--description", "new desc"])
+    assert result.exit_code == 0
+    assert client.put.call_args.args[0] == "/repositories/PVA/radio"
+    assert client.put.call_args.kwargs["json_body"] == {"description": "new desc"}
+
+
+def test_repo_edit_private_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.put.return_value = _repo()
+    monkeypatch.setattr("bb.commands.repo._make_client_for_ctx", lambda ctx: client)
+    runner.invoke(app, ["repo", "edit", "PVA/radio", "--private"])
+    assert client.put.call_args.kwargs["json_body"] == {"is_private": True}
+
+
+def test_repo_edit_public_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.put.return_value = _repo()
+    monkeypatch.setattr("bb.commands.repo._make_client_for_ctx", lambda ctx: client)
+    runner.invoke(app, ["repo", "edit", "PVA/radio", "--public"])
+    assert client.put.call_args.kwargs["json_body"] == {"is_private": False}
+
+
+def test_repo_edit_project_and_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.put.return_value = _repo()
+    monkeypatch.setattr("bb.commands.repo._make_client_for_ctx", lambda ctx: client)
+    runner.invoke(
+        app,
+        ["repo", "edit", "PVA/radio", "--project", "PROJ", "--name", "new-name"],
+    )
+    assert client.put.call_args.kwargs["json_body"] == {
+        "project": {"key": "PROJ"},
+        "name": "new-name",
+    }
+
+
+def test_repo_edit_all_flags_combined(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.put.return_value = _repo()
+    monkeypatch.setattr("bb.commands.repo._make_client_for_ctx", lambda ctx: client)
+    runner.invoke(
+        app,
+        [
+            "repo", "edit", "PVA/radio",
+            "--description", "desc",
+            "--private",
+            "--project", "PROJ",
+            "--name", "renamed",
+        ],
+    )
+    assert client.put.call_args.kwargs["json_body"] == {
+        "description": "desc",
+        "is_private": True,
+        "project": {"key": "PROJ"},
+        "name": "renamed",
+    }
+
+
+def test_repo_edit_prints_updated_full_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.put.return_value = _repo("PVA/renamed")
+    monkeypatch.setattr("bb.commands.repo._make_client_for_ctx", lambda ctx: client)
+    result = runner.invoke(app, ["repo", "edit", "PVA/radio", "--name", "renamed"])
+    assert "PVA/renamed" in result.output

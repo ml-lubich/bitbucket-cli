@@ -227,6 +227,42 @@ def repo_sync() -> None:
     typer.echo("synced with upstream")
 
 
+@app.command("edit")
+def repo_edit(
+    repo_arg: Optional[str] = typer.Argument(None, metavar="workspace/slug"),
+    description: str = typer.Option("", "--description"),
+    private: Optional[bool] = typer.Option(None, "--private/--public"),
+    project: str = typer.Option("", "--project"),
+    name: str = typer.Option("", "--name"),
+) -> None:
+    """Edit repository settings."""
+    ctx = _resolve_ctx(repo_arg)
+    payload = _build_edit_payload(description, private, project, name)
+    if not payload:
+        raise BBError("Provide at least one of --description, --private/--public, --project, --name")
+    client = _make_client_for_ctx(ctx)
+    r = client.put(f"/repositories/{ctx.workspace}/{ctx.repo}", json_body=payload)
+    typer.echo(f"updated {r.get('full_name', ctx.full_name)}")
+
+
+def _build_edit_payload(
+    description: str,
+    private: Optional[bool],
+    project: str,
+    name: str,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    if description:
+        payload["description"] = description
+    if private is not None:
+        payload["is_private"] = private
+    if project:
+        payload["project"] = {"key": project}
+    if name:
+        payload["name"] = name
+    return payload
+
+
 @app.command("set-default")
 def repo_set_default(
     repo_arg: str = typer.Argument(..., metavar="workspace/slug"),

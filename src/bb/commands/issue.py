@@ -180,6 +180,28 @@ def issue_comment(
     client.post(f"{_issues_path(ctx)}/{issue_id}/comments", json_body={"content": {"raw": body}})
 
 
+@app.command("status")
+def issue_status(
+    repo: _REPO_OPT = "",
+) -> None:
+    """Show issues reported by or assigned to the authenticated user."""
+    ctx = current_repo(repo)
+    client = _make_client_for_ctx(ctx)
+    me = client.get("/user")
+    uuid = me.get("uuid", "")
+    reported = list(
+        client.paginate(_issues_path(ctx), q=f'reporter.uuid="{uuid}"')
+    )
+    assigned = list(
+        client.paginate(_issues_path(ctx), q=f'assignee.uuid="{uuid}"')
+    )
+    typer.echo("Reported by you")
+    print_table(["ID", "TITLE", "KIND", "PRIORITY", "STATE"], [_fmt_row(i) for i in reported])
+    typer.echo("")
+    typer.echo("Assigned to you")
+    print_table(["ID", "TITLE", "KIND", "PRIORITY", "STATE"], [_fmt_row(i) for i in assigned])
+
+
 @app.command("delete")
 def issue_delete(
     issue_id: int = typer.Argument(..., help="Issue ID"),

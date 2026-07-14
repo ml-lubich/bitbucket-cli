@@ -140,3 +140,67 @@ def test_pr_checks_prints_status(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch(monkeypatch, client)
     result = runner.invoke(app, ["pr", "checks", "9"])
     assert "build" in result.output
+
+
+def test_pr_view_comments_flag_prints_comments(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.paginate.return_value = iter([
+        {
+            "user": {"display_name": "Alice"},
+            "created_on": "2026-01-02",
+            "content": {"raw": "Looks good to me"},
+        }
+    ])
+    _patch(monkeypatch, client)
+    result = runner.invoke(app, ["pr", "view", "9", "--comments"])
+    assert "Ship radio" in result.output
+    assert "Alice" in result.output
+    assert "Looks good to me" in result.output
+
+
+def test_pr_view_without_comments_flag_skips_comments(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.paginate.return_value = iter([
+        {
+            "user": {"display_name": "Alice"},
+            "created_on": "2026-01-02",
+            "content": {"raw": "Looks good to me"},
+        }
+    ])
+    _patch(monkeypatch, client)
+    result = runner.invoke(app, ["pr", "view", "9"])
+    assert "Alice" not in result.output
+    client.paginate.assert_not_called()
+
+
+def test_pr_status_shows_created_and_reviewing_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.get.return_value = {"uuid": "{my-uuid}"}
+    created_pr = {
+        "id": 1, "title": "My PR", "source": {"branch": {"name": "feat/a"}},
+        "author": {"display_name": "Misha"}, "state": "OPEN",
+    }
+    reviewing_pr = {
+        "id": 2, "title": "Review Me", "source": {"branch": {"name": "feat/b"}},
+        "author": {"display_name": "Bob"}, "state": "OPEN",
+    }
+    client.paginate.side_effect = [iter([created_pr]), iter([reviewing_pr])]
+    _patch(monkeypatch, client)
+    result = runner.invoke(app, ["pr", "status"])
+    assert result.exit_code == 0
+    assert "Created by you" in result.output
+    assert "My PR" in result.output
+    assert "Requesting your review" in result.output
+    assert "Review Me" in result.output
+
+
+def test_pr_status_queries_uuid_scoped_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client()
+    client.get.return_value = {"uuid": "{my-uuid}"}
+    client.paginate.side_effect = [iter([]), iter([])]
+    _patch(monkeypatch, client)
+    runner.invoke(app, ["pr", "status"])
+    calls = client.paginate.call_args_list
+    assert len(calls) == 2
+    assert calls[0].kwargs["q"] == 'author.uuid="{my-uuid}"'
+    assert calls[1].kwargs["q"] == 'reviewers.uuid="{my-uuid}"'

@@ -9,6 +9,7 @@ Failure: ConfigError on unknown keys. Secrets live in auth.py, never here.
 from __future__ import annotations
 
 import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,13 +20,23 @@ from bb.core.deployment import CLOUD_WEB_URL
 from bb.core.errors import ConfigError
 from bb.core.validation import validate_base_url
 
-_VALID_KEYS = {"base_url", "git_protocol", "editor", "default_repo", "default_workspace"}
+_VALID_KEYS = {
+    "base_url",
+    "git_protocol",
+    "editor",
+    "default_repo",
+    "default_workspace",
+    "oauth_client_id",
+    "oauth_client_secret",
+}
 _ENV_MAP = {
     "BB_BASE_URL": "base_url",
     "BB_GIT_PROTOCOL": "git_protocol",
     "BB_EDITOR": "editor",
     "BB_REPO": "default_repo",
     "BB_WORKSPACE": "default_workspace",
+    "BB_OAUTH_CLIENT_ID": "oauth_client_id",
+    "BB_OAUTH_CLIENT_SECRET": "oauth_client_secret",
 }
 
 
@@ -94,6 +105,8 @@ def set_user_value(key: str, value: str) -> None:
         value = validate_base_url(value)
     doc[key] = value
     path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    # config.toml may hold oauth_client_secret; keep it user-only like hosts.toml
+    path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 
 # Alias kept for internal callers

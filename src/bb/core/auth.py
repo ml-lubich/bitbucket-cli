@@ -12,6 +12,7 @@ import base64
 import json
 import os
 import stat
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -35,9 +36,11 @@ KEYRING_SERVICE = "bb"
 class Credential:
     token: str
     host: str = HOST
-    auth_type: str = "bearer"  # "bearer" | "basic"
+    auth_type: str = "bearer"  # "bearer" | "basic" | "oauth"
     username: str = ""
     source: str = "keyring"  # "env:<NAME>" | "dotenv:<NAME>" | "keyring" | "hosts"
+    refresh_token: str = ""
+    expires_at: float = 0.0
 
 
 # ── Legacy API (test_auth.py, test_client.py compat) ─────────────────────────
@@ -64,6 +67,7 @@ def authorization_header(cred: Credential) -> str:
 
 def git_https_config_args(cred: Credential) -> list[str]:
     """Return `git -c` args so HTTPS clone/fetch uses the stored credential."""
+    cred = maybe_refresh(cred)
     return ["-c", f"http.extraHeader=Authorization: {authorization_header(cred)}"]
 
 
@@ -102,6 +106,10 @@ def stored_credential(host: str = HOST) -> Credential:
 def save_credential(cred: Credential) -> Path:
     """Persist credential globally. Prefer OS keyring; fall back to hosts.toml."""
     meta = {"auth_type": cred.auth_type, "username": cred.username}
+    if cred.refresh_token:
+        meta["refresh_token"] = cred.refresh_token
+    if cred.expires_at:
+        meta["expires_at"] = str(cred.expires_at)
     if _keyring_set(cred.host, cred.token, meta):
         _write_hosts_meta(cred.host, auth_type=cred.auth_type, username=cred.username, storage="keyring")
         return _hosts_path()
@@ -113,9 +121,62 @@ def save_credential(cred: Credential) -> Path:
     entry.add("storage", "file")
     if cred.username:
         entry.add("username", cred.username)
+    if cred.refresh_token:
+        entry.add("refresh_token", cred.refresh_token)
+    if cred.expires_at:
+        entry.add("expires_at", cred.expires_at)
     doc[cred.host] = entry
     _write_hosts(doc)
     return _hosts_path()
+
+
+def refresh_credential(cred: Credential) -> Credential:
+    """Force-refresh an OAuth credential, persist rotation, and return the new one.
+
+    Raises AuthError (never surfacing token-endpoint bodies) when the
+    credential is not an OAuth login or the refresh token was revoked.
+    """
+    if cred.auth_type != "oauth" or not cred.refresh_token:
+        raise AuthError("not an OAuth login — run `bb auth login`")
+    from bb.core import oauth  # lazy import: avoid a auth<->oauth import cycle
+
+    client = oauth.resolve_oauth_client()
+    try:
+        token_resp = oauth.refresh_access_token(client, cred.refresh_token)
+    except AuthError as exc:
+        raise AuthError(f"token refresh failed — run `bb auth login` ({exc})") from exc
+    new_cred = Credential(
+        token=token_resp.access_token,
+        host=cred.host,
+        auth_type="oauth",
+        username=cred.username,
+        source=cred.source,
+        # Bitbucket rotates refresh tokens on every use; persist the newest.
+        refresh_token=token_resp.refresh_token or cred.refresh_token,
+        expires_at=time.time() + token_resp.expires_in,
+    )
+    save_credential(new_cred)
+    return new_cred
+
+
+def maybe_refresh(cred: Credential, *, skew: float = 120.0) -> Credential:
+    """Proactively refresh an OAuth credential nearing expiry; else return unchanged.
+
+    Only refreshes when auth_type=="oauth", a refresh_token is present, the
+    credential came from a persistent store (keyring/hosts — never env/dotenv),
+    and expires_at is set and within `skew` seconds (or already past).
+    """
+    if cred.auth_type != "oauth":
+        return cred
+    if not cred.refresh_token:
+        return cred
+    if cred.source not in ("keyring", "hosts"):
+        return cred
+    if not cred.expires_at:
+        return cred
+    if cred.expires_at - time.time() > skew:
+        return cred
+    return refresh_credential(cred)
 
 
 def delete_credential(host: str = HOST) -> bool:
@@ -235,15 +296,17 @@ def _keyring_get(host: str) -> dict[str, str] | None:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            return {"token": raw, "auth_type": "bearer", "username": ""}
+            return {"token": raw, "auth_type": "bearer", "username": "", "refresh_token": "", "expires_at": "0"}
         if not isinstance(data, dict) or not data.get("token"):
             return None
         return {
             "token": str(data["token"]),
             "auth_type": str(data.get("auth_type") or "bearer"),
             "username": str(data.get("username") or ""),
+            "refresh_token": str(data.get("refresh_token") or ""),
+            "expires_at": str(data.get("expires_at") or "0"),
         }
-    return {"token": raw, "auth_type": "bearer", "username": ""}
+    return {"token": raw, "auth_type": "bearer", "username": "", "refresh_token": "", "expires_at": "0"}
 
 
 def _keyring_delete(host: str) -> bool:
@@ -273,7 +336,16 @@ def _cred_from_keyring(host: str) -> Credential | None:
         auth_type=data.get("auth_type", "bearer"),
         username=data.get("username", ""),
         source="keyring",
+        refresh_token=data.get("refresh_token", ""),
+        expires_at=_to_float(data.get("expires_at", "0")),
     )
+
+
+def _to_float(value: object) -> float:
+    try:
+        return float(str(value))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _write_hosts_meta(
@@ -416,6 +488,8 @@ def _cred_from_file(host: str) -> Credential | None:
                 auth_type=str(entry.get("auth_type", "bearer")),
                 username=str(entry.get("username", "")),
                 source="hosts",
+                refresh_token=str(entry.get("refresh_token", "")),
+                expires_at=_to_float(entry.get("expires_at", "0")),
             )
         # Metadata-only entry (token in keyring) — already tried keyring above.
     flat_token = _hosts_token()
@@ -448,7 +522,8 @@ def _parse_env_file(path: Path) -> None:
         key, _, val = line.partition("=")
         key = key.strip()
         val = val.strip().strip('"').strip("'")
-        if key and key not in os.environ:
+        # Only credential keys bb understands; never inject arbitrary .env vars
+        if key in (*TOKEN_VARS, *EMAIL_VARS) and key not in os.environ:
             os.environ[key] = val
 
 

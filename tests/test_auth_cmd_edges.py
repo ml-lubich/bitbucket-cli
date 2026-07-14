@@ -75,7 +75,7 @@ def test_login_basic_with_username_saves(
 
 def test_login_invalid_auth_type_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_files(monkeypatch, tmp_path)
-    result = runner.invoke(app, ["auth", "login", "--token", "tok", "--auth-type", "oauth"])
+    result = runner.invoke(app, ["auth", "login", "--token", "tok", "--auth-type", "nope"])
     assert result.exit_code == 1
 
 
@@ -101,6 +101,18 @@ def test_login_rejects_token_and_with_token_together(
     assert result.exit_code == 1
 
 
+def test_login_rejects_oauth_auth_type_on_manual_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_files(monkeypatch, tmp_path)
+    result = runner.invoke(app, ["auth", "login", "--token", "x", "--auth-type", "oauth"])
+    assert result.exit_code == 1
+    assert (
+        'auth type "oauth" is set via browser login '
+        "(`bb auth login` with no token flags), not --auth-type"
+    ) in result.output
+
+
 def test_logout_without_credentials_prints_message(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_files(monkeypatch, tmp_path)
     result = runner.invoke(app, ["auth", "logout"])
@@ -120,6 +132,26 @@ def test_status_rejected_token_exits_1(tmp_path: Path, monkeypatch: pytest.Monke
     monkeypatch.setattr(auth_cmd, "_verify_user", _reject)
     result = runner.invoke(app, ["auth", "status"])
     assert result.exit_code == 1
+
+
+def test_status_degrades_gracefully_when_refresh_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import bb.commands.auth as auth_cmd
+    from bb.core.errors import AuthError
+
+    _patch_files(monkeypatch, tmp_path)
+    monkeypatch.setenv("BB_TOKEN", "stored-token")
+
+    def _raise_refresh(cred: object, **kwargs: object) -> object:
+        raise AuthError("network is down")
+
+    monkeypatch.setattr(auth_cmd, "maybe_refresh", _raise_refresh)
+    monkeypatch.setattr(auth_cmd, "_call_show_user_status", lambda cred, deployment: None)
+    result = runner.invoke(app, ["auth", "status"])
+    assert result.exit_code == 0
+    assert "warning: token refresh failed; showing stored credentials" in result.output
+    assert "stor****" in result.output
 
 
 def test_auth_token_prints_raw_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

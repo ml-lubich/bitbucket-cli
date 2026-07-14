@@ -46,7 +46,7 @@ class RepoRefInput(BaseModel):
 class AuthTypeInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    value: Literal["bearer", "basic"]
+    value: Literal["bearer", "basic", "oauth"]
 
 
 class MethodInput(BaseModel):
@@ -78,9 +78,9 @@ def validate_repo_parts(project: str, repo: str) -> tuple[str, str]:
 
 def validate_auth_type(value: str) -> str:
     try:
-        return AuthTypeInput(value=cast(Literal["bearer", "basic"], value)).value
+        return AuthTypeInput(value=cast(Literal["bearer", "basic", "oauth"], value)).value
     except ValidationError as exc:
-        raise BBError("invalid auth type; expected bearer or basic") from exc
+        raise BBError("invalid auth type; expected bearer, basic, or oauth") from exc
 
 
 def validate_method(value: str) -> str:

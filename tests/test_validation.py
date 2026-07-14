@@ -42,9 +42,13 @@ def test_validate_auth_type_accepts_basic() -> None:
     assert validate_auth_type("basic") == "basic"
 
 
+def test_validate_auth_type_accepts_oauth() -> None:
+    assert validate_auth_type("oauth") == "oauth"
+
+
 def test_validate_auth_type_rejects_unknown() -> None:
     with pytest.raises(BBError):
-        validate_auth_type("oauth")
+        validate_auth_type("nope")
 
 
 def test_validate_limit_rejects_over_max() -> None:

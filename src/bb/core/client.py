@@ -38,6 +38,7 @@ class ApiClient:
             "" if cred.host == "bitbucket.org" else f"https://{cred.host}"
         )
         self._transport = transport
+        self._auth = _build_auth(self._cred)
 
     @property
     def deployment(self) -> Deployment:
@@ -85,14 +86,13 @@ class ApiClient:
         return resp.text
 
     def _client(self) -> httpx.Client:
-        auth = _build_auth(self._cred)
         if self._transport:
             return httpx.Client(
                 base_url=self._deployment.api_url,
-                auth=auth,
+                auth=self._auth,
                 transport=self._transport,
             )
-        return httpx.Client(base_url=self._deployment.api_url, auth=auth)
+        return httpx.Client(base_url=self._deployment.api_url, auth=self._auth)
 
     def _request_json(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         resp = self._client().request(method, self._url(path), **kwargs)
@@ -125,6 +125,8 @@ class ApiClient:
 def _build_auth(cred: Credential) -> httpx.Auth:
     if cred.username:
         return httpx.BasicAuth(cred.username, cred.token)
+    if cred.auth_type == "oauth":
+        return _RefreshingBearerAuth(cred)
     return _BearerAuth(cred.token)
 
 
@@ -135,6 +137,36 @@ class _BearerAuth(httpx.Auth):
     def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
         request.headers["Authorization"] = f"Bearer {self._token}"
         yield request
+
+
+class _RefreshingBearerAuth(httpx.Auth):
+    """Bearer auth for OAuth credentials: on a 401, refresh once and retry once.
+
+    Retry bookkeeping (`retried`) MUST be a local variable inside each
+    auth_flow() call, not instance state — httpx may reuse one Auth instance
+    across many requests on the same client, and instance-level retry state
+    would let a second, unrelated request skip its own refresh-and-retry.
+    """
+
+    def __init__(self, cred: Credential) -> None:
+        self._cred = cred
+
+    def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        retried = False
+        token = self._cred.token
+        request.headers["Authorization"] = f"Bearer {token}"
+        response = yield request
+        if response.status_code == 401 and self._cred.refresh_token and not retried:
+            retried = True
+            from bb.core.auth import refresh_credential
+
+            try:
+                new_cred = refresh_credential(self._cred)
+            except Exception:
+                return
+            self._cred = new_cred
+            request.headers["Authorization"] = f"Bearer {new_cred.token}"
+            yield request
 
 
 def _do_request(client: httpx.Client, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
@@ -182,10 +214,11 @@ def _api_hint(status_code: int) -> str:
 
 def make_client(base_url: str = "") -> ApiClient:
     """Resolve credentials and return a ready ApiClient."""
-    from bb.core.auth import resolve_credential
+    from bb.core.auth import maybe_refresh, resolve_credential
     settings = load_settings()
     deployment = deployment_from_base_url(base_url or settings.base_url)
-    return ApiClient(resolve_credential(host=deployment.host), deployment=deployment)
+    cred = maybe_refresh(resolve_credential(host=deployment.host))
+    return ApiClient(cred, deployment=deployment)
 
 
 def raw_request(
@@ -197,9 +230,9 @@ def raw_request(
     transport: httpx.BaseTransport | None = None,
 ) -> str:
     """Raw text request — used for `bb api`, pipeline logs, other text endpoints."""
-    from bb.core.auth import resolve_credential
+    from bb.core.auth import maybe_refresh, resolve_credential
     deployment = deployment_from_base_url(base_url or load_settings().base_url)
-    cred = resolve_credential(host=deployment.host)
+    cred = maybe_refresh(resolve_credential(host=deployment.host))
     auth = _build_auth(cred)
     mapped_path = path if deployment.is_cloud else _map_datacenter_path(path)
     url = mapped_path if mapped_path.startswith(("http://", "https://")) else f"{deployment.api_url}{mapped_path}"
@@ -236,9 +269,9 @@ def post_files(
     files: dict[str, tuple[str, bytes]],
 ) -> dict[str, Any]:
     """Multipart POST for snippet file upload."""
-    from bb.core.auth import resolve_credential
+    from bb.core.auth import maybe_refresh, resolve_credential
     deployment = deployment_from_base_url(load_settings().base_url)
-    cred = resolve_credential(host=deployment.host)
+    cred = maybe_refresh(resolve_credential(host=deployment.host))
     auth = _build_auth(cred)
     httpx_files = {k: (v[0], v[1]) for k, v in files.items()}
     mapped_path = path if deployment.is_cloud else _map_datacenter_path(path)

@@ -15,6 +15,27 @@ Publish with a PyPI trusted publisher or token:
 uv publish
 ```
 
+### Recommended: GitHub Actions (trusted publishing)
+
+1. On PyPI → Account settings → Publishing → **Add a pending publisher**:
+   - **PyPI project name:** `bitbucket-bb`
+   - **Owner:** `ml-lubich`
+   - **Repository:** `bitbucket-cli`
+   - **Workflow:** `publish.yml`
+   - **Environment name:** *(leave blank)*
+2. Push a release or run the workflow manually:
+   - GitHub → Actions → **Publish** → **Run workflow**
+   - Or publish/republish GitHub release `v0.2.0`
+
+The workflow runs `./scripts/quality.sh`, `uv build`, then
+`pypa/gh-action-pypi-publish` (OIDC — no stored PyPI token).
+
+### Local token publish (fallback)
+
+Requires a valid API token in `~/.pypirc` (`username = __token__`) or
+`UV_PUBLISH_TOKEN`. Create at https://pypi.org/manage/account/token/
+(scope: entire account or project `bitbucket-bb`).
+
 After publish, install from PyPI:
 
 ```bash

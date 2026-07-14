@@ -67,10 +67,32 @@ bb config set base_url https://bitbucket.polariswireless.com
 | 5 | OS keyring (macOS Keychain / Linux Secret Service) | — |
 | 6 | `hosts.toml` fallback (mode 0600) | — |
 
-**Interactive login** (paste once; stored globally until logout):
+**Browser login (Bitbucket Cloud, interactive terminal):**
 
 ```bash
-bb auth login                        # prompts securely; stores in OS keyring
+bb auth login                        # opens your browser for OAuth login
+```
+
+With no token flags, on Bitbucket Cloud, in an interactive terminal, `bb auth
+login` performs a browser OAuth 2.0 authorization-code flow (Atlassian SSO):
+it opens your browser, you approve access, and `bb` stores an access token
+plus a rotating refresh token in the OS keyring. Tokens refresh
+automatically (proactively before requests near expiry, and reactively on a
+`401`) — no need to log in again until the refresh token itself is revoked or
+expires from months of disuse. See [docs/AUTH.md](docs/AUTH.md) for the full
+flow, the refresh/rotation model, and how to point `bb` at your own OAuth
+consumer via `oauth_client_id`/`oauth_client_secret` or
+`BB_OAUTH_CLIENT_ID`/`BB_OAUTH_CLIENT_SECRET`.
+
+```bash
+bb auth refresh                      # force a token refresh
+bb auth setup-git                    # print `git -c` flags for authenticated HTTPS
+```
+
+**Manual token login** (paste once; stored globally until logout — the only
+path on Data Center, non-interactive shells, and CI):
+
+```bash
 bb auth login --token "${YOUR_TOKEN}"
 echo "$TOKEN" | bb auth login --with-token --no-verify
 bb auth status                       # verify stored credential
@@ -124,6 +146,15 @@ UV_PROJECT_ENVIRONMENT=venv uv run bb issue close 7
 UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline list
 UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline run --branch main
 UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline logs abc-uuid-1234
+UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline variable list
+UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline variable create --key API_KEY --value secret --secured
+
+# Search and status
+UV_PROJECT_ENVIRONMENT=venv uv run bb search repos myservice --workspace myteam
+UV_PROJECT_ENVIRONMENT=venv uv run bb search code "TODO" --workspace myteam
+UV_PROJECT_ENVIRONMENT=venv uv run bb status
+UV_PROJECT_ENVIRONMENT=venv uv run bb pr status
+UV_PROJECT_ENVIRONMENT=venv uv run bb issue status
 ```
 
 ---
@@ -132,19 +163,21 @@ UV_PROJECT_ENVIRONMENT=venv uv run bb pipeline logs abc-uuid-1234
 
 | Group | Subcommands |
 |---|---|
-| `auth` | `login`, `logout`, `status`, `token` |
-| `pr` | `list`, `view`, `create`, `checkout`, `merge`, `close`, `reopen`, `edit`, `review`, `comment`, `diff`, `checks` |
-| `repo` | `list`, `view`, `clone`, `create`, `fork`, `delete`, `sync`, `set-default` |
-| `issue` | `list`, `view`, `create`, `edit`, `close`, `reopen`, `comment`, `delete` |
-| `pipeline` | `list`, `run`, `view`, `steps`, `logs`, `stop` |
+| `auth` | `login` (browser OAuth or token paste), `logout`, `status`, `token`, `refresh`, `setup-git` |
+| `pr` | `list`, `view` (`--comments`), `create`, `checkout`, `merge`, `close`, `reopen`, `edit`, `review`, `comment`, `diff`, `checks`, `status` |
+| `repo` | `list`, `view`, `clone`, `create`, `fork`, `delete`, `sync`, `edit`, `set-default` |
+| `issue` | `list`, `view`, `create`, `edit`, `close`, `reopen`, `comment`, `delete`, `status` |
+| `pipeline` | `list`, `run`, `view`, `steps`, `logs`, `stop`, `variable` (`list`, `create`, `delete`) |
 | `branch` | `list`, `create`, `delete` |
 | `workspace` | `list`, `view`, `members` |
 | `project` | `list`, `view`, `create` |
 | `snippet` | `list`, `view`, `create`, `edit`, `delete` |
+| `search` | `repos`, `code` |
 | `config` | `get`, `set` |
 | `api` | (top-level command — raw authenticated API request) |
 | `browse` | (top-level command — open repo in browser) |
 | `doctor` | (top-level command — config/auth diagnostics) |
+| `status` | (top-level command — current user + PRs awaiting your review) |
 | `completion` | (top-level command — print shell completion script) |
 
 Run `bb help`, `bb -h`, or `bb --help` for root help. Run
@@ -160,11 +193,13 @@ Use `bb doctor --json` for agent-friendly setup/auth diagnostics.
 
 | `gh` command | `bb` equivalent |
 |---|---|
-| `gh auth login` | `bb auth login` |
+| `gh auth login` | `bb auth login` (browser OAuth on Cloud+TTY; token prompt otherwise) |
 | `gh auth login --with-token` | `bb auth login --with-token` |
 | `gh auth status` | `bb auth status` |
 | `gh auth logout` | `bb auth logout` |
 | `gh auth token` | `bb auth token` |
+| `gh auth refresh` | `bb auth refresh` |
+| `gh auth setup-git` | `bb auth setup-git` |
 | `gh pr list` | `bb pr list` |
 | `gh pr create` | `bb pr create` |
 | `gh pr merge` | `bb pr merge <ID>` |
@@ -174,27 +209,43 @@ Use `bb doctor --json` for agent-friendly setup/auth diagnostics.
 | `gh pr close` | `bb pr close <ID>` |
 | `gh pr edit` | `bb pr edit <ID>` |
 | `gh pr comment --body "…"` | `bb pr comment <ID> --body "…"` |
+| `gh pr status` | `bb pr status` |
+| `gh pr view --comments` | `bb pr view <ID> --comments` |
 | `gh repo list` | `bb repo list` |
 | `gh repo clone` | `bb repo clone workspace/slug` |
 | `gh repo create` | `bb repo create --name myrepo` |
 | `gh repo fork` | `bb repo fork workspace/slug` |
 | `gh repo delete` | `bb repo delete workspace/slug` |
+| `gh repo edit` | `bb repo edit --description "…"` |
 | `gh issue list` | `bb issue list` |
 | `gh issue create` | `bb issue create --title "…"` |
 | `gh issue close` | `bb issue close <ID>` |
+| `gh issue status` | `bb issue status` |
 | `gh run list` | `bb pipeline list` |
 | `gh run view` | `bb pipeline view <UUID>` |
 | `gh workflow run` | `bb pipeline run` |
+| `gh secret set` / `gh variable set` | `bb pipeline variable create --key K --value V [--secured]` |
 | `gh api /repos/…` | `bb api /repositories/…` |
 | `gh browse` | `bb browse` |
+| `gh search repos` | `bb search repos <query> --workspace myteam` |
+| `gh search code` | `bb search code <query> --workspace myteam` |
+| `gh status` | `bb status` |
 | `gh completion -s bash` | `bb completion bash` |
 
 **Bitbucket-specific differences:**
 
 - `bb pr reopen` is not supported — Bitbucket Cloud has no API endpoint to
   reopen a declined PR. The command exits 1 with a clear message.
+- `bb pr ready` (draft→ready toggle), `bb repo rename`, and `bb repo archive`
+  are not supported — Bitbucket Cloud has no corresponding endpoints.
+- `bb` has no `label` or `release` commands — no Bitbucket Cloud API analog
+  (Downloads API is the closest match to releases, and was judged out of
+  scope for parity).
 - Pipeline references use UUIDs, not numeric run IDs.
 - Bitbucket issue `--kind` values: `bug`, `enhancement`, `proposal`, `task`.
+- Browser OAuth login (`bb auth login` with no flags) is Cloud-only. Data
+  Center always requires `--with-token` (a Personal/HTTP Access Token) — see
+  [docs/AUTH.md](docs/AUTH.md).
 
 ---
 
@@ -205,7 +256,7 @@ Use `bb doctor --json` for agent-friendly setup/auth diagnostics.
 | Priority | Source |
 |---|---|
 | 1 (highest) | CLI arguments (`--repo`, `--workspace`, etc.) |
-| 2 | Environment variables (`BB_REPO`, `BB_WORKSPACE`, `BB_EDITOR`, `BB_GIT_PROTOCOL`) |
+| 2 | Environment variables (`BB_REPO`, `BB_WORKSPACE`, `BB_EDITOR`, `BB_GIT_PROTOCOL`, `BB_OAUTH_CLIENT_ID`, `BB_OAUTH_CLIENT_SECRET`) |
 | 3 | Project config (`bb.toml` at current working directory) |
 | 4 | User config (`config.toml` via `platformdirs.user_config_dir("bb")`) |
 | 5 (lowest) | Hardcoded defaults |
@@ -219,6 +270,8 @@ Use `bb doctor --json` for agent-friendly setup/auth diagnostics.
 | `editor` | `""` | Editor for interactive prompts; falls back to `$EDITOR` |
 | `default_repo` | `""` | Default repo as `workspace/slug` |
 | `default_workspace` | `""` | Default workspace slug |
+| `oauth_client_id` | `""` | Override the OAuth consumer client ID used for browser login (see [docs/AUTH.md](docs/AUTH.md)) |
+| `oauth_client_secret` | `""` | Override the OAuth consumer client secret used for browser login |
 
 Read or write user config:
 
@@ -247,6 +300,7 @@ color codes. Useful in CI or scripts that parse `bb` output.
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Authentication (OAuth flow, refresh model, security notes)](docs/AUTH.md)
 - [API reference](docs/API.md)
 - [Testing](docs/TESTING.md)
 - [Runbook](docs/RUNBOOK.md)

@@ -6,6 +6,75 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Browser OAuth login**: `bb auth login` with no token flags, on Bitbucket
+  Cloud, in an interactive terminal, now performs a browser OAuth 2.0
+  authorization-code flow (Atlassian SSO) — opens the browser, runs a
+  localhost loopback callback server, exchanges the code for an access +
+  rotating refresh token, and stores both in the OS keyring. See
+  [docs/AUTH.md](AUTH.md) for the full flow and security model. Data Center,
+  non-interactive shells, and `--token`/`--with-token` invocations are
+  unaffected and never attempt a browser flow.
+- Transparent OAuth token refresh — proactive (before requests near expiry)
+  and reactive (on a `401`, refresh once and retry once) — with rotation
+  persistence, since Bitbucket issues a new refresh token on every use.
+  Confined to `core/auth.py` and `core/client.py`; env/`.env`-sourced tokens
+  are never auto-refreshed.
+- `bb auth refresh` — force a token refresh for an OAuth login.
+- `bb auth setup-git` — print the `git -c` flags that authenticate HTTPS
+  clone/fetch/push with the currently stored credential.
+- New config keys `oauth_client_id` / `oauth_client_secret` and env vars
+  `BB_OAUTH_CLIENT_ID` / `BB_OAUTH_CLIENT_SECRET` to point browser login at a
+  self-registered Bitbucket OAuth consumer instead of the embedded default.
+- `bb repo edit` — update repository description, visibility (`--private`/`--public`),
+  project, or name via `PUT /repositories/{workspace}/{repo}`.
+- `bb pr status` — pull requests you created and pull requests awaiting your
+  review, grouped and tabled.
+- `bb pr view --comments` — print PR comments after the detail view.
+- `bb issue status` — issues reported by you and issues assigned to you,
+  grouped and tabled.
+- `bb status` — top-level dashboard: authenticated user plus pull requests
+  awaiting your review in the current repo.
+- `bb search repos` / `bb search code` — search repositories by name or
+  search code within a workspace.
+- `bb pipeline variable list` / `create` / `delete` — manage Pipelines
+  repository variables, including `--secured` variables (value never echoed
+  back).
+- `bb api`: renamed `-f/--field` to `-f/--raw-field` (string body/query
+  fields) and added `-F/--field` with gh-style type coercion (`true`/`false`/
+  `null`/int; everything else stays a string). Added `--paginate` (follow
+  `next` pagination links, concatenating `values` arrays; `--limit` caps the
+  total items returned) and `--jq` (filter the JSON response through a
+  system `jq` binary — must be installed and on `PATH`).
+- `bb browse` gained a positional `TARGET` argument (a PR number opens that
+  pull request; a file path opens the source view, honoring `-b/--branch`),
+  `-b/--branch` (open the source tree at a branch), `-c/--commit` (open a
+  commit), and `-n/--no-browser` as an alias of `--no-open`.
+
+### Changed
+
+- `auth_type` now accepts `"oauth"` in addition to `"bearer"`/`"basic"`
+  (`core/validation.py`).
+
+### gh-parity decisions (verified Bitbucket Cloud endpoints only)
+
+| Command | Endpoint | Verdict |
+|---|---|---|
+| `auth refresh` | `POST site/oauth2/access_token` | INCLUDE |
+| `auth setup-git` | local git config only | INCLUDE |
+| `repo edit` | `PUT /repositories/{ws}/{repo}` | INCLUDE |
+| `repo rename` / `repo archive` | none on Cloud | OMIT |
+| `pr status` | `GET …/pullrequests?q=` + `/user` uuid | INCLUDE |
+| `pr ready` | no draft-toggle endpoint | OMIT |
+| `pr view --comments` | `GET …/pullrequests/{id}/comments` | INCLUDE |
+| `issue status` | `GET …/issues?q=reporter/assignee` | INCLUDE |
+| `status` (top-level dashboard) | `/user` + reviewer PR query | INCLUDE |
+| `search repos` | `GET /repositories/{ws}?q=name~"…"` | INCLUDE |
+| `search code` | `GET /workspaces/{ws}/search/code?search_query=` | INCLUDE |
+| `pipeline variable list/create/delete` | `…/pipelines_config/variables/` | INCLUDE |
+| `label` / `release` | no Bitbucket API | OMIT |
+
 ## [0.2.0] - 2026-07-09
 
 ### Changed

@@ -11,9 +11,16 @@ src/bb/
 │   ├── config.py        — Settings dataclass; load_settings(); set_user_value()
 │   ├── auth.py          — Credential/Credentials; resolve/save/delete;
 │   │                      OS keyring + hosts.toml fallback;
+│   │                      refresh_credential()/maybe_refresh() (OAuth rotation);
 │   │                      git HTTPS Authorization helpers (extraHeader)
+│   ├── oauth.py         — Bitbucket Cloud OAuth 2.0 authorization-code flow;
+│   │                      resolve_oauth_client(); build_authorize_url();
+│   │                      exchange_code(); refresh_access_token();
+│   │                      run_loopback_login() (localhost HTTP callback server);
+│   │                      no Typer imports — UI-agnostic, MockTransport-testable
 │   ├── client.py        — ApiClient (httpx wrapper); make_client(); post_files();
-│   │                      raw_request(); BBClient alias
+│   │                      raw_request(); BBClient alias;
+│   │                      _RefreshingBearerAuth (reactive 401→refresh→retry)
 │   ├── context.py       — RepoContext; current_repo(); current_branch();
 │   │                      git-remote → workspace/slug detection
 │   ├── deployment.py    — Cloud/Data Center base URL and API URL resolution
@@ -22,18 +29,23 @@ src/bb/
 │   └── errors.py        — BBError hierarchy (AuthError, ApiError, ContextError,
 │                          ConfigError)
 └── commands/
-    ├── auth.py           — login / logout / status / token
-    ├── pr.py             — list / view / create / checkout / merge / close /
-    │                       reopen / edit / review / comment / diff / checks
+    ├── auth.py           — login (token paste or browser OAuth) / logout /
+    │                       status / token / refresh / setup-git
+    ├── pr.py             — list / view (--comments) / create / checkout /
+    │                       merge / close / reopen / edit / review / comment /
+    │                       diff / checks / status
     ├── repo.py           — list / view / clone / create / fork / delete /
-    │                       sync / set-default
+    │                       sync / edit / set-default
     ├── issue.py          — list / view / create / edit / close / reopen /
-    │                       comment / delete
-    ├── pipeline.py       — list / run / view / steps / logs / stop
+    │                       comment / delete / status
+    ├── pipeline.py       — list / run / view / steps / logs / stop /
+    │                       variable (list / create / delete)
     ├── branch.py         — list / create / delete
     ├── workspace.py      — list / view / members
     ├── project.py        — list / view / create
     ├── snippet.py        — list / view / create / edit / delete
+    ├── search.py         — repos / code
+    ├── status.py         — top-level dashboard (current user + PRs to review)
     ├── api.py            — raw authenticated request (GET/POST/PUT/DELETE)
     ├── config_cmd.py     — get / set
     └── browse.py         — open URLs in system browser
@@ -73,6 +85,55 @@ Token resolution (auth.py, separate from config.py):
 5. OS keyring (`keyring` lib: macOS Keychain / XDG Secret Service / Windows Credential Locker)
 6. `hosts.toml` in `platformdirs.user_config_dir("bb")` (mode 0600 fallback when keyring unavailable)
 
+This precedence order is unchanged by OAuth support. Only sources 5 and 6 are
+eligible for automatic refresh (`Credential.source in {"keyring", "hosts"}`);
+see [OAuth module and refresh integration](#oauth-module-and-refresh-integration).
+
+## OAuth module and refresh integration
+
+`core/oauth.py` implements Bitbucket Cloud's OAuth 2.0 authorization-code
+flow in isolation from Typer/CLI concerns — no `typer` import anywhere in the
+module — so it stays testable with `httpx.MockTransport` and reusable outside
+`bb auth login`:
+
+- `OAuthClient(client_id, client_secret)` / `TokenResponse(access_token, refresh_token, expires_in)` — frozen dataclasses.
+- `resolve_oauth_client()` — resolves consumer credentials env > config >
+  embedded default; raises `AuthError` if no `client_id` is available.
+- `build_authorize_url()` — builds the `bitbucket.org/site/oauth2/authorize` URL.
+- `exchange_code()` / `refresh_access_token()` — `POST site/oauth2/access_token`
+  with HTTP Basic `client_id:secret`; non-2xx responses raise `AuthError` with
+  the status code only (body never surfaced).
+- `run_loopback_login()` — binds an ephemeral `("localhost", 0)` HTTP server
+  in a daemon thread, opens the browser (always also printing the URL as a
+  fallback via an injectable `print_url` callback), waits on a
+  `threading.Event` for the callback (success/deny/state-mismatch/timeout),
+  then calls `exchange_code()`.
+
+Full flow narrative, security properties, and consumer-registration steps:
+see [docs/AUTH.md](AUTH.md).
+
+**Refresh has two integration points**, both funneling through
+`core/auth.py`'s `refresh_credential()` (does the actual token-endpoint call
++ persists the rotated `refresh_token`) and `maybe_refresh()` (the gate that
+decides whether a refresh is due):
+
+1. **Proactive** — `maybe_refresh()` wraps `resolve_credential()` in
+   `client.py`'s `make_client()`, `raw_request()`, and `post_files()`, and in
+   `commands/auth.py`'s `status`/`token` commands. Refreshes only
+   keyring/hosts-sourced `auth_type=="oauth"` credentials within `skew=120s`
+   of `expires_at`.
+2. **Reactive** — `client.py`'s `_RefreshingBearerAuth` (an `httpx.Auth`,
+   selected in `_build_auth()` only when `cred.auth_type == "oauth"`) catches
+   a `401`, calls `refresh_credential()` once, retries the request once with
+   the new token. Retry state is a local variable inside `auth_flow()`, not
+   instance state, so one `httpx.Auth` instance reused across many requests
+   on the same client can't leak retry bookkeeping between unrelated calls.
+
+Because Bitbucket rotates the refresh token on every use, both paths funnel
+through the same `refresh_credential()` → `save_credential()` write so the
+newest refresh token is always the one persisted, regardless of which path
+triggered the refresh.
+
 ## Layering invariants
 
 1. `commands/*` may import any `core/*` module; never from other `commands/*`.
@@ -80,6 +141,7 @@ Token resolution (auth.py, separate from config.py):
 3. `ApiClient` is the only HTTP path in the entire codebase. No command may call `httpx` directly.
 4. `make_client()` in `client.py` is the only site where credentials are resolved and injected into HTTP API requests. HTTPS git clone/fetch/checkout additionally resolve credentials via `auth.git_command(..., https_auth=True)` and pass them to git as a one-shot `http.extraHeader` (not persisted in git config).
 5. No secret values (raw token strings) may appear in output, log messages, or error text. Use `masked()` from `output.py` for any display that references a credential. (`bb auth token` and the git `extraHeader` argv are intentional exceptions for scripting / private HTTPS clone.)
+6. `core/oauth.py` never imports `typer` and is never imported by `cli.py` directly — only `commands/auth.py` and `core/auth.py` import it (lazily, to avoid an `auth.py`↔`oauth.py` import cycle). OAuth token-endpoint response bodies, `code`, `refresh_token`, `client_secret`, and `state` are never surfaced in output, logs, or the loopback callback HTML — see `docs/AUTH.md`.
 
 ## Data flow
 
@@ -107,10 +169,18 @@ CLI arg parse (typer)
 
 - **Dict-dispatch group registration** (`_GROUPS` in `cli.py`) keeps `cli.py` decoupled from command implementations; adding a group is one dict entry and one import.
 - **Injected transport seam** (`ApiClient` and `raw_request()` accept an optional `httpx.BaseTransport`): tests pass a `MockTransport` rather than patching module globals.
-- **Global secret storage**: `bb auth login` pastes a token once and stores it
-  in the OS keyring (preferred). `hosts.toml` (mode 0600) is the fallback when
-  no keyring backend is available (headless CI). Env / `.env` still override
-  for non-interactive agents.
+- **Global secret storage**: `bb auth login` (browser OAuth on Cloud+TTY, or
+  a pasted token everywhere else) stores the credential once in the OS
+  keyring (preferred). `hosts.toml` (mode 0600) is the fallback when no
+  keyring backend is available (headless CI) — see `docs/AUTH.md`'s
+  0600-fallback risk note for OAuth refresh tokens specifically. Env / `.env`
+  still override for non-interactive agents, and are never auto-refreshed.
+- **Browser OAuth is Cloud-only, TTY-gated**: `bb auth login` only attempts
+  the loopback OAuth flow when the target deployment is Bitbucket Cloud *and*
+  stdin is a TTY *and* no token flags were passed. Data Center always uses a
+  Personal/HTTP Access Token; non-TTY invocations fail fast with a clear
+  message rather than hanging on a browser that can't be opened. See
+  `docs/AUTH.md` for the full routing table.
 - **Cloud + Data Center**: Cloud uses `https://api.bitbucket.org/2.0`; Data
   Center/Server uses `<base_url>/rest/api/1.0`. Cloud-shaped repo paths are
   translated into Data Center project/repo REST paths by `core/client.py`.

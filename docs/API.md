@@ -550,9 +550,14 @@ Make a raw authenticated request to the Bitbucket Cloud API 2.0 and print JSON.
 |---|---|
 | `ENDPOINT` | API path, e.g. `/2.0/repositories/myworkspace/my-repo` |
 | `-X, --method TEXT` | HTTP method: `GET` (default), `POST`, `PUT`, `DELETE`, `PATCH` |
-| `-f, --field TEXT` | `key=value` body field; repeatable |
-| `--paginate` | Follow `next` page links and aggregate results |
+| `-f, --raw-field TEXT` | `key=value` string body/query field; repeatable |
+| `-F, --field TEXT` | `key=value` body/query field with type coercion (`true`/`false`/`null`/int; everything else stays a string); repeatable |
 | `--input TEXT` | JSON body from file |
+| `--paginate` | Follow `next` pagination links, concatenating `values` arrays into one response |
+| `--limit INTEGER` | Max total items to return when `--paginate` is set |
+| `--jq TEXT` | Filter the JSON response through a system `jq` binary (must be installed and on `PATH`) |
+
+`--input` is mutually exclusive with `-f/--raw-field` and `-F/--field`.
 
 Subcommand alias: `bb api request` is equivalent to `bb api`.
 
@@ -560,15 +565,20 @@ Subcommand alias: `bb api request` is equivalent to `bb api`.
 
 ## browse
 
-### `bb browse [OPTIONS]`
+### `bb browse [TARGET] [OPTIONS]`
 
 Open the current repository in the system browser.
 
-| Flag | Description |
+| Argument / Flag | Description |
 |---|---|
+| `TARGET` | Optional: a PR number (opens the PR) or a file path (opens the source view) |
 | `-r, --repo TEXT` | workspace/slug override |
-| `-b, --branch TEXT` | Open branch view |
-| `--no-open` | Print URL only; do not open browser |
+| `-b, --branch TEXT` | Open the source tree at this branch (also used with a file-path `TARGET`) |
+| `-c, --commit TEXT` | Open this commit |
+| `-n, --no-browser` | Print URL only; do not open browser (alias of `--no-open`) |
+
+`--commit` takes precedence over `TARGET`; a numeric `TARGET` opens a pull
+request, a non-numeric `TARGET` is treated as a file path.
 
 ---
 

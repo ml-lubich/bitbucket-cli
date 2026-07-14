@@ -79,8 +79,8 @@ wheels = [
 ]
 
 [[package]]
-name = "bitbucket-cli"
-version = "0.2.0"
+name = "bitbucket-bb"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

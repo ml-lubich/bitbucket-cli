@@ -386,6 +386,9 @@ def _write_hosts(doc: tomlkit.TOMLDocument) -> None:
     path = _hosts_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+    # Restrict the secrets file to the owner. POSIX-only: on Windows chmod can't
+    # express owner-only, so the file relies on the user-profile directory's
+    # default NTFS ACLs (owner + SYSTEM + Administrators) for the same intent.
     path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 

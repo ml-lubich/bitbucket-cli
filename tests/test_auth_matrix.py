@@ -7,6 +7,7 @@ auth-type/username combos, CLI login, dotenv. One assert per test.
 from __future__ import annotations
 
 import itertools
+import os
 from pathlib import Path
 
 import pytest
@@ -133,7 +134,8 @@ def test_file_fallback_mode_0600(
     hosts = _patch_hosts(monkeypatch, tmp_path)
     monkeypatch.setattr(auth_mod, "_keyring_set", lambda *a, **k: False)
     auth_mod.save_credential(Credential(token=token, host=host))
-    assert hosts.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":  # POSIX 0600 mode is not applicable on Windows (NTFS ACLs)
+        assert hosts.stat().st_mode & 0o777 == 0o600
 
 
 @pytest.mark.parametrize("token,host,auth_type,username", _FILE_CASES[:400])

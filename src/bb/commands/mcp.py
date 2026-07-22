@@ -93,7 +93,7 @@ def _schema(props: dict[str, Any], required: list[str]) -> dict[str, Any]:
 
 
 TOOLS: list[dict[str, Any]] = [
-    {"name": "whoami", "description": "The authenticated Bitbucket user.",
+    {"name": "whoami", "description": "The authenticated Bitbucket Cloud user. On Data Center (no /user endpoint) this returns the projects you can access, confirming the token works.",
      "inputSchema": _schema({}, []), "_fn": _whoami},
     {"name": "api_get", "description": "Read-only GET on any Bitbucket API path, e.g. /user or /repositories/{ws}.",
      "inputSchema": _schema({"path": {"type": "string", "description": "API path starting with /"}}, ["path"]),

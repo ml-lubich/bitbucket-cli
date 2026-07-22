@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "bbctl"
+name = "bitbucket-client"
 version = "0.3.0"
 description = "Lightweight gh-style CLI for Bitbucket Cloud and Data Center"
 requires-python = ">=3.12"

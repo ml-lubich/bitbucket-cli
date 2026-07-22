@@ -20,14 +20,14 @@ activation:
 
 ```bash
 # once published to PyPI:
-pip install bbctl          # or: uv tool install bbctl
+pip install bitbucket-client   # or: uv tool install bitbucket-client
 # from a clone:
 uv tool install .
 bb --help
 ```
 
-> The PyPI package is `bbctl` (`bb`, `bb-cli`, and `bbcli` were already taken).
-> The installed command is always `bb`.
+> The PyPI package is `bitbucket-client` (`bitbucket-cli`, `bb`, and `bb-cli`
+> were already taken). The installed command is always `bb`.
 
 <details>
 <summary>Developing on <code>bb</code> itself</summary>

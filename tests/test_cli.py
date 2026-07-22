@@ -13,8 +13,10 @@ def test_version_exits_zero() -> None:
 
 
 def test_version_output_contains_version() -> None:
+    from bb import __version__
+
     result = runner.invoke(app, ["--version"])
-    assert "0.2.0" in result.output
+    assert __version__ in result.output
 
 
 def test_help_exits_zero() -> None:

@@ -138,6 +138,7 @@ Add `--json` to any list/view command for machine-readable output, and
 | `project` | `list`, `view`, `create` |
 | `snippet` | `list`, `view`, `create`, `edit`, `delete` |
 | `search` | `repos`, `code` |
+| `mcp` | `serve` (read-only MCP server for coding agents) |
 | `config` | `get`, `set` |
 | `api` | raw authenticated API request |
 | `browse` | open the repo in your browser |
@@ -147,6 +148,26 @@ Add `--json` to any list/view command for machine-readable output, and
 
 Help is available at every level: `bb --help`, `bb <group> --help`,
 `bb <group> <subcommand> --help` (or `-h`).
+
+---
+
+## Use `bb` from a coding agent (MCP)
+
+`bb mcp serve` runs a **read-only** [Model Context Protocol](https://modelcontextprotocol.io)
+server over stdio, so Claude, Codex, and other agents can query Bitbucket
+directly — no shell glue. It reuses your existing `bb` auth and, because `bb`
+maps Cloud paths to Data Center automatically, the same tools work against
+on-prem hosts.
+
+Tools exposed: `whoami`, `repo_list`, `repo_view`, `pr_list`, `pr_view`,
+`issue_list`, `pipeline_list`, and `api_get` (any read-only GET path). Every
+tool is a `GET` — nothing can mutate your data.
+
+Point an MCP client at the command `bb mcp serve`. For Claude Code:
+
+```bash
+claude mcp add bitbucket -- bb mcp serve
+```
 
 ---
 

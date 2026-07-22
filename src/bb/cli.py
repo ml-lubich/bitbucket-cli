@@ -23,6 +23,7 @@ from bb.commands import (
     config_cmd,
     doctor,
     issue,
+    mcp,
     pipeline,
     pr,
     project,
@@ -48,6 +49,7 @@ _GROUPS: dict[str, typer.Typer] = {
     "snippet": snippet.app,
     "config": config_cmd.app,
     "search": search.app,
+    "mcp": mcp.app,
 }
 _HELP_OPTIONS: dict[str, object] = {"help_option_names": ["-h", "--help"]}
 _HELP_COMMAND_CONTEXT: dict[str, object] = _HELP_OPTIONS | {

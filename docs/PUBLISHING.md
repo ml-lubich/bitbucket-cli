@@ -18,7 +18,7 @@ uv publish
 ### Recommended: GitHub Actions (trusted publishing)
 
 1. On PyPI → Account settings → Publishing → **Add a pending publisher**:
-   - **PyPI project name:** `bitbucket-bb`
+   - **PyPI project name:** `bbctl`
    - **Owner:** `ml-lubich`
    - **Repository:** `bitbucket-cli`
    - **Workflow:** `publish.yml`
@@ -34,16 +34,16 @@ The workflow runs `./scripts/quality.sh`, `uv build`, then
 
 Requires a valid API token in `~/.pypirc` (`username = __token__`) or
 `UV_PUBLISH_TOKEN`. Create at https://pypi.org/manage/account/token/
-(scope: entire account or project `bitbucket-bb`).
+(scope: entire account or project `bbctl`).
 
 After publish, install from PyPI:
 
 ```bash
-uv tool install bitbucket-bb
+uv tool install bbctl
 bb --version
 ```
 
-The PyPI distribution name is `bitbucket-bb` (console script remains `bb`).
+The PyPI distribution name is `bbctl` (console script remains `bb`).
 The GitHub repository stays `ml-lubich/bitbucket-cli`.
 
 ## Homebrew
@@ -62,7 +62,7 @@ class BitbucketCli < Formula
 
   desc "Minimal gh-style CLI for Bitbucket Cloud and Data Center"
   homepage "https://github.com/ml-lubich/bitbucket-cli"
-  url "https://files.pythonhosted.org/packages/source/b/bitbucket-bb/bitbucket_bb-0.2.0.tar.gz"
+  url "https://files.pythonhosted.org/packages/source/b/bbctl/bbctl-0.3.0.tar.gz"
   sha256 "REPLACE_WITH_SDIST_SHA256"
   license "MIT"
 
@@ -82,7 +82,7 @@ Install from a tap after the formula is pushed:
 
 ```bash
 brew tap ml-lubich/tap
-brew install bitbucket-bb
+brew install bbctl
 ```
 
 ## Release Checklist

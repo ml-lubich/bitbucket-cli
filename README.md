@@ -19,16 +19,15 @@ The recommended install puts a `bb` command on your `PATH` — no prefixes, no
 activation:
 
 ```bash
-uv tool install .          # from a clone
-# or, once published to PyPI:
-uv tool install bitbucket-bb
+# once published to PyPI:
+pip install bbctl          # or: uv tool install bbctl
+# from a clone:
+uv tool install .
 bb --help
 ```
 
-> The PyPI package is `bitbucket-bb` (the name `bitbucket-cli` was already taken
-> by an unrelated project). The installed command is always `bb`.
-
-No `uv`? `pip install -e .` works too.
+> The PyPI package is `bbctl` (`bb`, `bb-cli`, and `bbcli` were already taken).
+> The installed command is always `bb`.
 
 <details>
 <summary>Developing on <code>bb</code> itself</summary>

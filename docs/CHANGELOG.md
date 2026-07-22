@@ -79,8 +79,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- PyPI distribution renamed to `bitbucket-bb` because `bitbucket-cli` is an
-  unrelated legacy package on PyPI. The `bb` console script is unchanged.
+- PyPI distribution named `bbctl` (`bb`, `bb-cli`, `bbcli`, and `bitbucket-cli`
+  are all taken on PyPI). The `bb` console script is unchanged.
 
 ### Added
 

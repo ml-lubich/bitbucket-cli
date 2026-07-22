@@ -5,9 +5,18 @@ on:
     branches: ["main"]
   pull_request:
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    name: quality (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

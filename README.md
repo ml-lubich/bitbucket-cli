@@ -19,8 +19,7 @@ The recommended install puts a `bb` command on your `PATH` — no prefixes, no
 activation:
 
 ```bash
-# once published to PyPI:
-pip install bitbucket-client   # or: uv tool install bitbucket-client
+pip install bitbucket-client          # or: uv tool install bitbucket-client
 # from a clone:
 uv tool install .
 bb --help

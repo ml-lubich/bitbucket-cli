@@ -48,42 +48,31 @@ The GitHub repository stays `ml-lubich/bitbucket-cli`.
 
 ## Homebrew
 
-Recommended shape:
+Tap: [`ml-lubich/homebrew-tap`](https://github.com/ml-lubich/homebrew-tap)
+(`brew tap ml-lubich/tap`). Formula: `Formula/bitbucket-client.rb`.
 
-1. Publish a GitHub release with an sdist tarball.
-2. Compute the tarball SHA256.
-3. Update a tap formula with the new version and SHA.
+On each PyPI release:
 
-Example formula:
+1. Confirm sdist URL + sha256 from
+   `https://pypi.org/pypi/bitbucket-client/<version>/json`.
+2. Bump `url` / `sha256` in the tap formula.
+3. Regenerate Python resources if deps changed:
+   `brew update-python-resources ml-lubich/tap/bitbucket-client`
+   (or edit `resource` blocks by hand). Keep `depends_on "rust" => :build`
+   while `pydantic-core` builds from source.
+4. Commit + push the tap; locally:
+   `brew update && brew upgrade ml-lubich/tap/bitbucket-client && brew test bitbucket-client`
 
-```ruby
-class BitbucketCli < Formula
-  include Language::Python::Virtualenv
-
-  desc "Minimal gh-style CLI for Bitbucket Cloud and Data Center"
-  homepage "https://github.com/ml-lubich/bitbucket-cli"
-  url "https://files.pythonhosted.org/packages/source/b/bitbucket-client/bitbucket_client-0.3.0.tar.gz"
-  sha256 "REPLACE_WITH_SDIST_SHA256"
-  license "MIT"
-
-  depends_on "python@3.12"
-
-  def install
-    virtualenv_install_with_resources
-  end
-
-  test do
-    assert_match "bb version", shell_output("#{bin}/bb --version")
-  end
-end
-```
-
-Install from a tap after the formula is pushed:
+Install:
 
 ```bash
-brew tap ml-lubich/tap
-brew install bitbucket-client
+brew install ml-lubich/tap/bitbucket-client
+bb --version
+bb mcp serve   # read-only MCP for agents
 ```
+
+Ensure `/opt/homebrew/bin/bb` links into the Cellar formula — not a repo
+`venv/bin/bb` or a stale `uv tool` shim.
 
 ## Release Checklist
 

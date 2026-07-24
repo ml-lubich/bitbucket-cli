@@ -8,6 +8,19 @@
 - Raw tokens are never printed by `auth status`. Use `bb auth token` only when
   a script explicitly needs the secret on stdout.
 
+## Install (agents)
+
+Prefer one install path so `bb` on PATH is unambiguous:
+
+```bash
+brew install ml-lubich/tap/bitbucket-client
+bb --version   # expect 0.3.1+
+```
+
+PyPI alternative: `uv tool install bitbucket-client` (same `bb` console script).
+Avoid mixing Homebrew, `uv tool`, and a repo `venv` symlink for `bb` — that
+shadows the intended binary.
+
 ## Bootstrap
 
 ```bash
@@ -25,6 +38,36 @@ export BB_TOKEN="${BITBUCKET_HTTP_ACCESS_TOKEN}"
 bb doctor --json
 # or:
 printf '%s' "$BITBUCKET_HTTP_ACCESS_TOKEN" | bb auth login --with-token --no-verify
+```
+
+## MCP (coding agents)
+
+`bb mcp serve` is a **read-only** stdio MCP server (JSON-RPC 2.0). Tools are
+GET-only (`whoami`, `repo_*`, `pr_*`, `issue_list`, `pipeline_list`, `api_get`)
+and reuse the same auth / Cloud↔Data Center path mapping as the CLI.
+
+```bash
+# Claude Code
+claude mcp add bitbucket -- bb mcp serve
+```
+
+Cursor (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "bitbucket": {
+      "command": "bb",
+      "args": ["mcp", "serve"]
+    }
+  }
+}
+```
+
+Smoke:
+
+```bash
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}' | bb mcp serve
 ```
 
 ## Repo Targeting
